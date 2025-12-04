@@ -1,0 +1,40 @@
+{
+  "service": "CRM",
+  "cspDomains": {
+    "connect-src": [
+      "https://auth-sbx.sidedrawersbx.com",
+      "https://user-api-sbx.sidedrawersbx.com",
+      "https://tenants-gateway-api-sbx.sidedrawersbx.com"
+    ]
+  },
+  "variables": [
+    {
+      "name": "oauth_redirect_uri",
+      "label": "OAuth Redirect URI",
+      "defaultValue": "",
+      "isRequired": true,
+      "helpText": "Public URL of this widget. Must match URL in SideDrawer OAuth app settings."
+    },
+    {
+      "name": "client_id",
+      "label": "SideDrawer Client ID",
+      "defaultValue": "",
+      "isRequired": true,
+      "helpText": "OAuth2 Client ID from your SideDrawer OAuth application."
+    },
+    {
+      "name": "client_secret",
+      "label": "SideDrawer Client Secret",
+      "defaultValue": "",
+      "isRequired": true,
+      "helpText": "OAuth2 Client Secret from your SideDrawer OAuth application."
+    },
+    {
+      "name": "environment",
+      "label": "Environment",
+      "defaultValue": "sandbox",
+      "isRequired": false,
+      "helpText": "SideDrawer environment: 'sandbox' or 'production'."
+    }
+  ]
+}
