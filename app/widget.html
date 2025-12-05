@@ -4,28 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SideDrawer Integration</title>
-    
-    <!-- Single Page Apps for GitHub Pages -->
-    <!-- https://github.com/rafgraph/spa-github-pages -->
-    <!-- Redirect handling for OAuth callbacks on GitHub Pages -->
-    <script type="text/javascript">
-      // Single Page Apps for GitHub Pages
-      // MIT License
-      // https://github.com/rafgraph/spa-github-pages
-      // This script checks to see if a redirect is present in sessionStorage,
-      // and if so, it redirects the page to the correct URL.
-      (function(l) {
-        if (l.search[1] === '/' ) {
-          var decoded = l.search.slice(1).split('&').map(function(s) { 
-            return s.replace(/~and~/g, '&')
-          }).join('?');
-          window.history.replaceState(null, null,
-              l.pathname.slice(0, -1) + decoded + l.hash
-          );
-        }
-      }(window.location))
-    </script>
-    
     <!-- Zoho CRM SDK -->
     <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
     <style>
@@ -236,42 +214,38 @@
       </div>
     </div>
 
-    <script>
-      // Read URL parameters for configuration
+      <script>
+      // Read URL parameters for initial config
       const urlParams = new URLSearchParams(window.location.search);
-      const environment = urlParams.get('environment') || urlParams.get('env') || 'sandbox';
+      const isOAuthCallback = urlParams.has('code') || urlParams.has('error');
       
-      // OAuth2 Configuration (can be customized via URL parameters)
+      // Helper to get config param (from URL or sessionStorage)
+      function getConfigParam(key) {
+        // If not OAuth callback and URL has param, store it
+        if (!isOAuthCallback && urlParams.has(key)) {
+          const value = urlParams.get(key);
+          sessionStorage.setItem('sd_config_' + key, value);
+          return value;
+        }
+        // Otherwise try sessionStorage
+        return sessionStorage.getItem('sd_config_' + key) || null;
+      }
+      
+      // OAuth2 Configuration (will be updated with Zoho config if available)
       const OAUTH_CONFIG = {
-        // Environment-specific endpoints
-        authorizationEndpoint: environment === 'production' 
-          ? 'https://auth.sidedrawer.com/authorize'
-          : 'https://auth-sbx.sidedrawersbx.com/authorize',
-        tokenEndpoint: environment === 'production'
-          ? 'https://auth.sidedrawer.com/oauth/token'
-          : 'https://auth-sbx.sidedrawersbx.com/oauth/token',
-        audience: environment === 'production'
-          ? 'https://user-api.sidedrawer.com'
-          : 'https://user-api-sbx.sidedrawersbx.com',
-        
-        // Client credentials - can be passed via URL parameters
-        clientId: urlParams.get('client_id') || 'AYKueA9CuMXe7fMj8QfJM722F98NwZyA',
-        clientSecret: urlParams.get('client_secret') || null, // OPTIONAL with PKCE
-        
-        // Redirect URI - can be passed via URL parameter
-        redirectUri: urlParams.get('redirect_uri') || (window.location.origin + window.location.pathname.split('?')[0]),
-        
+        authorizationEndpoint: 'https://auth-sbx.sidedrawersbx.com/authorize',
+        tokenEndpoint: 'https://auth-sbx.sidedrawersbx.com/oauth/token',
+        clientId: getConfigParam('client_id') || null,
+        audience: 'https://user-api-sbx.sidedrawersbx.com',
+        redirectUri: getConfigParam('redirect_uri') || (window.location.origin + window.location.pathname.split('?')[0]),
         scope: 'openid profile email offline_access'
       };
       
-      // Log configuration on startup
-      console.log('🔧 SideDrawer OAuth Configuration:');
-      console.log('  Environment:', environment);
-      console.log('  Client ID:', OAUTH_CONFIG.clientId);
-      console.log('  Client Secret:', OAUTH_CONFIG.clientSecret ? 'Provided' : 'Not provided (using PKCE only)');
+      // Log initial configuration
+      console.log('🔧 Initial OAuth Config (PKCE - NO CLIENT SECRET):');
+      console.log('  Client ID:', OAUTH_CONFIG.clientId ? 'Set' : 'NOT SET');
       console.log('  Redirect URI:', OAUTH_CONFIG.redirectUri);
-      console.log('  Auth Endpoint:', OAUTH_CONFIG.authorizationEndpoint);
-      console.log('  Token Endpoint:', OAUTH_CONFIG.tokenEndpoint);
+      console.log('  Is OAuth Callback:', isOAuthCallback);
 
       // Storage keys
       const STORAGE_KEYS = {
@@ -376,21 +350,11 @@
                 console.log('Current URL:', OAUTH_CONFIG.redirectUri);
               }
               
-              // Client ID (REQUIRED)
-              if (config.client_id && config.client_id.trim()) {
-                OAUTH_CONFIG.clientId = config.client_id.trim();
-                console.log('✓ Using configured Client ID');
-              } else {
-                console.warn('⚠ No Client ID configured - using default (for development only)');
-              }
-              
-              // Client Secret (REQUIRED)
-              if (config.client_secret && config.client_secret.trim()) {
-                OAUTH_CONFIG.clientSecret = config.client_secret.trim();
-                console.log('✓ Using configured Client Secret');
-              } else {
-                console.warn('⚠ No Client Secret configured - using default (for development only)');
-              }
+                // Client ID (can also come from URL params)
+                if (config.client_id && config.client_id.trim()) {
+                  OAUTH_CONFIG.clientId = config.client_id.trim();
+                  console.log('✓ Client ID loaded from Zoho config');
+                }
               
               // Environment (REQUIRED)
               if (config.environment === 'production') {
@@ -542,10 +506,8 @@
                 console.log('Code verifier sample:', codeVerifier.substring(0, 20) + '...' + codeVerifier.substring(codeVerifier.length - 10));
                 console.log('Token endpoint:', OAUTH_CONFIG.tokenEndpoint);
                 console.log('Client ID:', OAUTH_CONFIG.clientId);
-                console.log('Client Secret:', OAUTH_CONFIG.clientSecret ? 'Provided' : 'Not provided (using PKCE only)');
                 console.log('Redirect URI:', OAUTH_CONFIG.redirectUri);
 
-                // Build token request body
                 const tokenRequestBody = {
                   grant_type: 'authorization_code',
                   client_id: OAUTH_CONFIG.clientId,
@@ -554,21 +516,6 @@
                   redirect_uri: OAUTH_CONFIG.redirectUri,
                   audience: OAUTH_CONFIG.audience
                 };
-                
-                // Only include client_secret if provided (PKCE makes it optional)
-                if (OAUTH_CONFIG.clientSecret) {
-                  tokenRequestBody.client_secret = OAUTH_CONFIG.clientSecret;
-                }
-                
-                console.log('🔍 Full token request (before sending):', tokenRequestBody);
-                console.log('Token request body (sanitized):', { 
-                  ...tokenRequestBody, 
-                  client_secret: tokenRequestBody.client_secret ? '***' : 'Not included', 
-                  code: code.substring(0, 20) + '...',
-                  code_verifier: codeVerifier.substring(0, 20) + '...' + codeVerifier.substring(codeVerifier.length - 10)
-                });
-                console.log('🌐 Posting to:', OAUTH_CONFIG.tokenEndpoint);
-                console.log('📍 Current origin:', window.location.origin);
 
                 const tokenResponse = await fetch(OAUTH_CONFIG.tokenEndpoint, {
                   method: 'POST',
@@ -603,7 +550,7 @@
                 document.getElementById('app-content').innerHTML = `
                   <div class="success-message">
                     ✓ Authentication successful!
-                    <br><small>Check console for details. Close this window manually.</small>
+                    <br><small>Closing window...</small>
                   </div>
                 `;
                 
@@ -619,14 +566,13 @@
                   console.warn('⚠ Parent window not available');
                 }
                 
-                // Clean up
+                // Clean up and close
                 localStorage.removeItem(STORAGE_KEYS.codeVerifier);
                 sessionStorage.removeItem(STORAGE_KEYS.codeVerifier);
-                // KEEP POPUP OPEN FOR DEBUGGING - don't auto-close
-                // setTimeout(() => {
-                //   console.log('Closing popup...');
-                //   window.close();
-                // }, 1000);
+                setTimeout(() => {
+                  console.log('Closing popup...');
+                  window.close();
+                }, 1000);
                 
               } catch (error) {
                 console.error('❌ OAuth popup error:', error);
@@ -637,7 +583,7 @@
                   <div class="error-message">
                     ✗ Authentication failed
                     <br><small>${error.message}</small>
-                    <br><small style="margin-top: 10px; display: block;">Check browser console for details. Close this window manually when done.</small>
+                    <br><small style="margin-top: 10px; display: block;">Check browser console for details. Window will close in 5 seconds...</small>
                   </div>
                 `;
                 
@@ -648,8 +594,7 @@
                     error: error.message
                   }, window.location.origin);
                 }
-                // KEEP POPUP OPEN FOR DEBUGGING - don't auto-close
-                // setTimeout(() => window.close(), 5000);
+                setTimeout(() => window.close(), 5000);
               }
               return;
             } else {
@@ -761,6 +706,11 @@
 
         async startOAuthFlow() {
           try {
+            // Validate configuration
+            if (!OAUTH_CONFIG.clientId) {
+              throw new Error('Client ID not configured. Please provide it via URL parameter (?client_id=XXX) or configure in Zoho CRM settings.');
+            }
+            
             // Generate PKCE code verifier and challenge
             const codeVerifier = this.generateCodeVerifier();
             const codeChallenge = await this.generateCodeChallenge(codeVerifier);
@@ -876,8 +826,7 @@
               throw new Error('Code verifier not found. Please try again.');
             }
 
-            // Exchange code for token
-            // Build token request body
+            // Exchange code for token (PKCE - no client_secret)
             const tokenRequestBody = {
               grant_type: 'authorization_code',
               client_id: OAUTH_CONFIG.clientId,
@@ -886,11 +835,6 @@
               redirect_uri: OAUTH_CONFIG.redirectUri,
               audience: OAUTH_CONFIG.audience
             };
-            
-            // Only include client_secret if provided (PKCE makes it optional)
-            if (OAUTH_CONFIG.clientSecret) {
-              tokenRequestBody.client_secret = OAUTH_CONFIG.clientSecret;
-            }
             
             const tokenResponse = await fetch(OAUTH_CONFIG.tokenEndpoint, {
               method: 'POST',
@@ -940,18 +884,12 @@
           }
 
           try {
-            // Build refresh token request body
             const refreshRequestBody = {
               grant_type: 'refresh_token',
               client_id: OAUTH_CONFIG.clientId,
               refresh_token: refreshToken,
               audience: OAUTH_CONFIG.audience
             };
-            
-            // Only include client_secret if provided (PKCE makes it optional)
-            if (OAUTH_CONFIG.clientSecret) {
-              refreshRequestBody.client_secret = OAUTH_CONFIG.clientSecret;
-            }
             
             const response = await fetch(OAUTH_CONFIG.tokenEndpoint, {
               method: 'POST',
