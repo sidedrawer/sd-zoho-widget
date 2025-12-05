@@ -299,7 +299,7 @@
                 console.warn('⚠ Ignoring message from different origin:', event.origin);
                 return;
               }
-
+              
               if (event.data && event.data.type === 'SIDEDRAWER_OAUTH_TOKENS') {
                 console.log('✅ Received OAuth tokens from popup');
                 console.log('Has access_token:', !!event.data.tokens?.access_token);
@@ -361,5 +361,741 @@
               } else {
                 console.warn('⚠ No Client ID configured - using default (for development only)');
               }
+              
+              // Client Secret (REQUIRED)
+              if (config.client_secret && config.client_secret.trim()) {
+                OAUTH_CONFIG.clientSecret = config.client_secret.trim();
+                console.log('✓ Using configured Client Secret');
+              } else {
+                console.warn('⚠ No Client Secret configured - using default (for development only)');
+              }
+              
+              // Environment (REQUIRED)
+              if (config.environment === 'production') {
+                OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
+                OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
+                OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
+                console.log('✓ Using PRODUCTION environment');
+              } else if (config.environment === 'sandbox') {
+                // Already set to sandbox by default
+                console.log('✓ Using SANDBOX environment');
+              } else {
+                console.warn('⚠ No environment configured - using sandbox (default)');
+              }
+            } else {
+              console.warn('⚠ No Zoho configuration found - using defaults (development mode)');
+            }
+          } catch (error) {
+            console.warn('⚠ Could not load Zoho config, using defaults (development mode):', error.message);
+          }
+        }
 
-... (truncated for tool input size)
+        // Zoho Session Storage Methods
+        async setZohoSession(data) {
+          if (this.zohoInitialized) {
+            try {
+              await ZOHO.CRM.API.setVariable({ key: ZOHO_SESSION_KEY, value: JSON.stringify(data) });
+              console.log('✓ Stored in Zoho session:', ZOHO_SESSION_KEY);
+              return true;
+            } catch (error) {
+              console.error('Failed to store in Zoho session:', error);
+              // Fallback to localStorage
+              localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
+              return false;
+            }
+          } else {
+            // Fallback to localStorage
+            localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
+            return false;
+          }
+        }
+
+        async getZohoSession() {
+          if (this.zohoInitialized) {
+            try {
+              const result = await ZOHO.CRM.API.getVariable(ZOHO_SESSION_KEY);
+              if (result && result[ZOHO_SESSION_KEY]) {
+                console.log('✓ Retrieved from Zoho session');
+                return JSON.parse(result[ZOHO_SESSION_KEY]);
+              }
+              return null;
+            } catch (error) {
+              console.error('Failed to get Zoho session:', error);
+              // Fallback to localStorage
+              const data = localStorage.getItem(ZOHO_SESSION_KEY);
+              return data ? JSON.parse(data) : null;
+            }
+          } else {
+            // Fallback to localStorage
+            const data = localStorage.getItem(ZOHO_SESSION_KEY);
+            return data ? JSON.parse(data) : null;
+          }
+        }
+
+        async clearZohoSession() {
+          if (this.zohoInitialized) {
+            try {
+              await ZOHO.CRM.API.setVariable({ key: ZOHO_SESSION_KEY, value: null });
+              console.log('✓ Cleared Zoho session');
+            } catch (error) {
+              console.error('Failed to clear Zoho session:', error);
+            }
+          }
+          localStorage.removeItem(ZOHO_SESSION_KEY);
+        }
+
+        async init() {
+          // Check if we're returning from OAuth redirect
+          const urlParams = new URLSearchParams(window.location.search);
+          const code = urlParams.get('code');
+          const error = urlParams.get('error');
+
+          // Check if we're in a popup window opened for OAuth
+          const isPopup = window.opener && !window.opener.closed;
+
+          if (error) {
+            if (isPopup) {
+              // Close popup and let parent handle error
+              window.close();
+            } else {
+              this.showError(`Authentication error: ${error}`);
+              this.cleanupOAuthState();
+            }
+            return;
+          }
+
+          if (code) {
+            if (isPopup) {
+              // We're in the OAuth popup - exchange code for tokens and pass to parent
+              console.log('🔐 OAuth popup: Received authorization code');
+              console.log('Code:', code.substring(0, 20) + '...');
+              
+              // Show loading in popup
+              document.getElementById('app-content').innerHTML = `
+                <div class="loading">
+                  <div class="spinner"></div>
+                  <p>Completing authentication...</p>
+                  <p style="font-size: 12px; color: #666; margin-top: 10px;">This window will close automatically...</p>
+                </div>
+              `;
+              
+              try {
+                // IMPORTANT: Try state parameter FIRST (most reliable, can't be stale)
+                let codeVerifier = null;
+                const state = urlParams.get('state');
+                console.log('🔍 State parameter from URL:', state ? state.substring(0, 50) + '...' : 'NOT FOUND');
+                
+                if (state) {
+                  try {
+                    const decoded = atob(state);
+                    console.log('🔍 Decoded state:', decoded);
+                    const stateData = JSON.parse(decoded);
+                    console.log('🔍 Parsed state data:', stateData);
+                    codeVerifier = stateData.verifier;
+                    console.log('✅ Code verifier from state parameter:', codeVerifier ? codeVerifier.substring(0, 10) + '...' : 'NOT FOUND');
+                  } catch (e) {
+                    console.warn('⚠ Could not parse state parameter:', e);
+                    console.error('State parsing error details:', e.stack);
+                  }
+                }
+                
+                // Fallback to localStorage only if state failed
+                if (!codeVerifier) {
+                  codeVerifier = localStorage.getItem(STORAGE_KEYS.codeVerifier);
+                  console.log('Code verifier from localStorage:', codeVerifier ? codeVerifier.substring(0, 10) + '...' : 'NOT FOUND');
+                }
+                
+                // Last resort: sessionStorage
+                if (!codeVerifier) {
+                  codeVerifier = sessionStorage.getItem(STORAGE_KEYS.codeVerifier);
+                  console.log('Code verifier from sessionStorage:', codeVerifier ? codeVerifier.substring(0, 10) + '...' : 'NOT FOUND');
+                }
+                
+                if (!codeVerifier) {
+                  throw new Error('Code verifier not found in localStorage, sessionStorage, or state parameter');
+                }
+                
+                console.log('✓ Code verifier found, exchanging code for tokens...');
+                console.log('Code verifier length:', codeVerifier.length);
+                console.log('Code verifier sample:', codeVerifier.substring(0, 20) + '...' + codeVerifier.substring(codeVerifier.length - 10));
+                console.log('Token endpoint:', OAUTH_CONFIG.tokenEndpoint);
+                console.log('Client ID:', OAUTH_CONFIG.clientId);
+                console.log('Client Secret:', OAUTH_CONFIG.clientSecret ? 'Provided' : 'Not provided (using PKCE only)');
+                console.log('Redirect URI:', OAUTH_CONFIG.redirectUri);
+
+                // Build token request body
+                const tokenRequestBody = {
+                  grant_type: 'authorization_code',
+                  client_id: OAUTH_CONFIG.clientId,
+                  code: code,
+                  code_verifier: codeVerifier,
+                  redirect_uri: OAUTH_CONFIG.redirectUri,
+                  audience: OAUTH_CONFIG.audience
+                };
+                
+                // Only include client_secret if provided (PKCE makes it optional)
+                if (OAUTH_CONFIG.clientSecret) {
+                  tokenRequestBody.client_secret = OAUTH_CONFIG.clientSecret;
+                }
+                
+                console.log('Token request body:', { 
+                  ...tokenRequestBody, 
+                  client_secret: tokenRequestBody.client_secret ? '***' : 'Not included', 
+                  code: code.substring(0, 20) + '...',
+                  code_verifier: codeVerifier.substring(0, 20) + '...' + codeVerifier.substring(codeVerifier.length - 10)
+                });
+
+                const tokenResponse = await fetch(OAUTH_CONFIG.tokenEndpoint, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify(tokenRequestBody)
+                });
+
+                console.log('Token response status:', tokenResponse.status, tokenResponse.statusText);
+
+                if (!tokenResponse.ok) {
+                  const responseText = await tokenResponse.text();
+                  console.error('❌ Token exchange error response (raw):', responseText);
+                  let errorData;
+                  try {
+                    errorData = JSON.parse(responseText);
+                  } catch (e) {
+                    errorData = { error: 'Parse error', raw: responseText };
+                  }
+                  console.error('❌ Token exchange error (parsed):', errorData);
+                  throw new Error(errorData.error_description || errorData.error || `Token exchange failed: ${tokenResponse.status}`);
+                }
+
+                const tokenData = await tokenResponse.json();
+                console.log('✅ Token exchange successful!');
+                console.log('Has access_token:', !!tokenData.access_token);
+                console.log('Has refresh_token:', !!tokenData.refresh_token);
+                console.log('Expires in:', tokenData.expires_in);
+                
+                // Show success message in popup
+                document.getElementById('app-content').innerHTML = `
+                  <div class="success-message">
+                    ✓ Authentication successful!
+                    <br><small>Closing window...</small>
+                  </div>
+                `;
+                
+                // Send tokens to parent window
+                if (window.opener && !window.opener.closed) {
+                  console.log('Sending tokens to parent window...');
+                  window.opener.postMessage({ 
+                    type: 'SIDEDRAWER_OAUTH_TOKENS',
+                    tokens: tokenData
+                  }, window.location.origin);
+                  console.log('✅ Tokens sent to parent');
+                } else {
+                  console.warn('⚠ Parent window not available');
+                }
+                
+                // Clean up and close
+                localStorage.removeItem(STORAGE_KEYS.codeVerifier);
+                sessionStorage.removeItem(STORAGE_KEYS.codeVerifier);
+                setTimeout(() => {
+                  console.log('Closing popup...');
+                  window.close();
+                }, 1000);
+                
+              } catch (error) {
+                console.error('❌ OAuth popup error:', error);
+                console.error('Error details:', error.stack);
+                
+                // Show error message in popup
+                document.getElementById('app-content').innerHTML = `
+                  <div class="error-message">
+                    ✗ Authentication failed
+                    <br><small>${error.message}</small>
+                    <br><small style="margin-top: 10px; display: block;">Check browser console for details. Window will close in 5 seconds...</small>
+                  </div>
+                `;
+                
+                // Send error to parent
+                if (window.opener && !window.opener.closed) {
+                  window.opener.postMessage({ 
+                    type: 'SIDEDRAWER_OAUTH_ERROR',
+                    error: error.message
+                  }, window.location.origin);
+                }
+                setTimeout(() => window.close(), 5000);
+              }
+              return;
+            } else {
+              // Normal flow (not in popup) - handle callback directly
+              await this.handleOAuthCallback(code);
+              return;
+            }
+          }
+
+          // Check existing token
+          await this.checkConnection();
+        }
+
+        async checkConnection() {
+          // Try to get existing session
+          const session = await this.getZohoSession();
+          
+          if (session && session.accessToken && !this.isTokenExpired(session.expiresAt)) {
+            // Valid session exists
+            console.log('✓ Valid session found');
+            this.showConnectedStatus();
+          } else if (this.getRefreshToken()) {
+            // Have refresh token, try silent refresh
+            console.log('🔄 Attempting silent refresh...');
+            document.getElementById('app-content').innerHTML = `
+              <div class="loading">
+                <div class="spinner"></div>
+                <p>Refreshing connection...</p>
+              </div>
+            `;
+            await this.refreshAccessToken();
+          } else {
+            // No valid session or refresh token
+            this.showDisconnectedStatus();
+          }
+        }
+
+        async showConnectedStatus() {
+          const session = await this.getZohoSession();
+          const expiryDate = session ? new Date(parseInt(session.expiresAt)) : new Date();
+          const hasRefreshToken = !!this.getRefreshToken();
+          
+          document.getElementById('app-content').innerHTML = `
+            <div class="status-card connected">
+              <div class="status-indicator">
+                <div class="status-dot connected"></div>
+                <span class="status-text">Connected to SideDrawer</span>
+              </div>
+              <p style="color: #555; font-size: 14px;">Your integration is active and ready to use.</p>
+            </div>
+
+            <div class="info-section">
+              <p><strong>Status:</strong> Authenticated</p>
+              <p><strong>Storage:</strong> ${this.zohoInitialized ? 'Zoho Session (shared across widgets)' : 'localStorage (fallback)'}</p>
+              <p><strong>Token Expires:</strong> ${expiryDate.toLocaleString()}</p>
+              <p><strong>Silent Refresh:</strong> ${hasRefreshToken ? '✓ Enabled' : '✗ Disabled'}</p>
+            </div>
+
+            <div class="button-group">
+              <button class="btn btn-danger" onclick="auth.disconnect()">Disconnect</button>
+              <button class="btn" onclick="auth.testConnection()">Test Connection</button>
+            </div>
+
+            <div id="test-result"></div>
+          `;
+        }
+
+        showDisconnectedStatus() {
+          document.getElementById('app-content').innerHTML = `
+            <div class="status-card">
+              <div class="status-indicator">
+                <div class="status-dot"></div>
+                <span class="status-text">Not Connected</span>
+              </div>
+              <p style="color: #555; font-size: 14px;">Connect your SideDrawer account to enable the integration.</p>
+            </div>
+
+            <div class="info-section">
+              <p><strong>What is SideDrawer?</strong></p>
+              <p>SideDrawer is a secure document storage and sharing platform designed for financial advisors and their clients.</p>
+              <br>
+              <p><strong>This integration allows you to:</strong></p>
+              <ul style="margin-left: 20px; margin-top: 10px;">
+                <li>Access SideDrawer documents directly from Zoho CRM</li>
+                <li>Share content with clients through SideDrawer</li>
+                <li>Manage client documents securely</li>
+              </ul>
+            </div>
+
+            <button class="btn btn-success" onclick="auth.startOAuthFlow()">Connect to SideDrawer</button>
+          `;
+        }
+
+        showError(message) {
+          document.getElementById('app-content').innerHTML = `
+            <div class="status-card error">
+              <div class="status-indicator">
+                <div class="status-dot error"></div>
+                <span class="status-text">Connection Error</span>
+              </div>
+              <div class="error-message">
+                ${message}
+              </div>
+            </div>
+
+            <button class="btn" onclick="auth.checkConnection()">Try Again</button>
+          `;
+        }
+
+        async startOAuthFlow() {
+          try {
+            // Generate PKCE code verifier and challenge
+            const codeVerifier = this.generateCodeVerifier();
+            const codeChallenge = await this.generateCodeChallenge(codeVerifier);
+
+            // Store code verifier in BOTH localStorage and sessionStorage for redundancy
+            localStorage.setItem(STORAGE_KEYS.codeVerifier, codeVerifier);
+            sessionStorage.setItem(STORAGE_KEYS.codeVerifier, codeVerifier);
+            console.log('✓ Code verifier stored:', codeVerifier.substring(0, 10) + '...');
+            console.log('✓ Code verifier length:', codeVerifier.length);
+
+            // Build authorization URL with state containing code verifier for fallback
+            const stateObj = {
+              random: this.generateRandomString(16),
+              verifier: codeVerifier
+            };
+            const state = JSON.stringify(stateObj);
+            const encodedState = btoa(state);
+            
+            console.log('✓ State object:', { random: stateObj.random, verifier: stateObj.verifier.substring(0, 10) + '...' });
+            console.log('✓ State JSON length:', state.length);
+            console.log('✓ Encoded state length:', encodedState.length);
+            
+            const authUrl = new URL(OAUTH_CONFIG.authorizationEndpoint);
+            authUrl.searchParams.append('response_type', 'code');
+            authUrl.searchParams.append('client_id', OAUTH_CONFIG.clientId);
+            authUrl.searchParams.append('redirect_uri', OAUTH_CONFIG.redirectUri);
+            authUrl.searchParams.append('scope', OAUTH_CONFIG.scope);
+            authUrl.searchParams.append('audience', OAUTH_CONFIG.audience);
+            authUrl.searchParams.append('code_challenge', codeChallenge);
+            authUrl.searchParams.append('code_challenge_method', 'S256');
+            authUrl.searchParams.append('state', encodedState);
+
+            console.log('Starting OAuth flow...');
+            console.log('Authorization URL:', authUrl.toString().substring(0, 100) + '...');
+            console.log('Redirect URI:', OAUTH_CONFIG.redirectUri);
+            console.log('Client ID:', OAUTH_CONFIG.clientId);
+
+            // Check if we're running inside an iframe (Zoho)
+            const isInIframe = window.self !== window.top;
+            console.log('Is in iframe:', isInIframe);
+
+            if (isInIframe) {
+              console.log('Detected iframe environment - opening popup window');
+              
+              // Open popup window for OAuth (works in Zoho iframe)
+              const width = 600;
+              const height = 700;
+              const left = (screen.width - width) / 2;
+              const top = (screen.height - height) / 2;
+              
+              const popupUrl = authUrl.toString();
+              console.log('🚀 Opening popup to:', popupUrl.substring(0, 150) + '...');
+              console.log('🔑 State parameter in URL:', authUrl.searchParams.get('state')?.substring(0, 50) + '...');
+              
+              const popup = window.open(
+                popupUrl,
+                'SideDrawer OAuth',
+                `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+              );
+
+              if (!popup) {
+                throw new Error('Popup blocked! Please allow popups for this site and try again.');
+              }
+
+              // Show waiting status
+              document.getElementById('app-content').innerHTML = `
+                <div class="status-card">
+                  <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span class="status-text">Authenticating...</span>
+                  </div>
+                  <p style="color: #555; font-size: 14px;">Please complete the login in the popup window.</p>
+                  <p style="color: #999; font-size: 12px; margin-top: 10px;">
+                    Don't see the popup? Check if your browser blocked it and allow popups for this site.
+                  </p>
+                </div>
+              `;
+
+              // Poll for popup close or callback
+              const pollInterval = setInterval(() => {
+                if (popup.closed) {
+                  clearInterval(pollInterval);
+                  console.log('Popup closed - checking for auth completion');
+                  // Check if we got redirected back with a code
+                  setTimeout(() => this.checkConnection(), 500);
+                }
+              }, 500);
+
+            } else {
+              console.log('Not in iframe - using direct redirect');
+              // Not in iframe (localhost testing) - use direct redirect
+              window.location.href = authUrl.toString();
+            }
+
+          } catch (error) {
+            console.error('OAuth flow error:', error);
+            this.showError(`Failed to start authentication: ${error.message}`);
+          }
+        }
+
+        async handleOAuthCallback(code) {
+          document.getElementById('app-content').innerHTML = `
+            <div class="loading">
+              <div class="spinner"></div>
+              <p>Completing authentication...</p>
+            </div>
+          `;
+
+          try {
+            const codeVerifier = localStorage.getItem(STORAGE_KEYS.codeVerifier);
+            
+            if (!codeVerifier) {
+              throw new Error('Code verifier not found. Please try again.');
+            }
+
+            // Exchange code for token
+            // Build token request body
+            const tokenRequestBody = {
+              grant_type: 'authorization_code',
+              client_id: OAUTH_CONFIG.clientId,
+              code: code,
+              code_verifier: codeVerifier,
+              redirect_uri: OAUTH_CONFIG.redirectUri,
+              audience: OAUTH_CONFIG.audience
+            };
+            
+            // Only include client_secret if provided (PKCE makes it optional)
+            if (OAUTH_CONFIG.clientSecret) {
+              tokenRequestBody.client_secret = OAUTH_CONFIG.clientSecret;
+            }
+            
+            const tokenResponse = await fetch(OAUTH_CONFIG.tokenEndpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(tokenRequestBody)
+            });
+
+            if (!tokenResponse.ok) {
+              const errorData = await tokenResponse.json();
+              throw new Error(errorData.error_description || 'Token exchange failed');
+            }
+
+            const tokenData = await tokenResponse.json();
+            
+            // Store tokens
+            this.saveTokens(tokenData);
+            this.cleanupOAuthState();
+
+            // Clear URL parameters
+            window.history.replaceState({}, document.title, window.location.pathname);
+
+            // Show success
+            document.getElementById('app-content').innerHTML = `
+              <div class="success-message">
+                ✓ Successfully connected to SideDrawer!
+              </div>
+            `;
+
+            // Reload to show connected status
+            setTimeout(() => this.checkConnection(), 1500);
+
+          } catch (error) {
+            console.error('Token exchange error:', error);
+            this.showError(`Authentication failed: ${error.message}`);
+            this.cleanupOAuthState();
+          }
+        }
+
+        async refreshAccessToken() {
+          const refreshToken = this.getRefreshToken();
+          
+          if (!refreshToken) {
+            this.showDisconnectedStatus();
+            return;
+          }
+
+          try {
+            // Build refresh token request body
+            const refreshRequestBody = {
+              grant_type: 'refresh_token',
+              client_id: OAUTH_CONFIG.clientId,
+              refresh_token: refreshToken,
+              audience: OAUTH_CONFIG.audience
+            };
+            
+            // Only include client_secret if provided (PKCE makes it optional)
+            if (OAUTH_CONFIG.clientSecret) {
+              refreshRequestBody.client_secret = OAUTH_CONFIG.clientSecret;
+            }
+            
+            const response = await fetch(OAUTH_CONFIG.tokenEndpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(refreshRequestBody)
+            });
+
+            if (!response.ok) {
+              throw new Error('Token refresh failed');
+            }
+
+            const tokenData = await response.json();
+            this.saveTokens(tokenData);
+            this.showConnectedStatus();
+
+          } catch (error) {
+            console.error('Token refresh error:', error);
+            this.disconnect();
+          }
+        }
+
+        async testConnection() {
+          const resultDiv = document.getElementById('test-result');
+          resultDiv.innerHTML = `
+            <div class="loading" style="padding: 20px;">
+              <div class="spinner"></div>
+              <p>Testing connection...</p>
+            </div>
+          `;
+
+          try {
+            const token = await this.getAccessToken();
+            
+            // Test API call to SideDrawer tenant endpoint
+            const response = await fetch('https://tenants-gateway-api-sbx.sidedrawersbx.com/api/v1/tenants/tenant/shared', {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              
+              if (data && data.length > 0) {
+                const tenant = data[0];
+                const tenantInfo = { 
+                  tenantId: tenant.id || "", 
+                  brandCode: tenant.defaultBrandCode || "", 
+                  region: tenant.region || "" 
+                };
+                
+                resultDiv.innerHTML = `
+                  <div class="success-message">
+                    ✓ Connection test successful!
+                  </div>
+                  <div class="info-section" style="margin-top: 15px;">
+                    <strong style="display: block; margin-bottom: 10px;">Tenant Information:</strong>
+                    <p><strong>Tenant ID:</strong> ${tenantInfo.tenantId}</p>
+                    <p><strong>Brand Code:</strong> ${tenantInfo.brandCode}</p>
+                    <p><strong>Region:</strong> ${tenantInfo.region}</p>
+                  </div>
+                  <div class="token-info" style="margin-top: 15px;">
+                    <strong style="display: block; margin-bottom: 5px;">Access Token:</strong>
+                    <code style="word-break: break-all; font-size: 11px; display: block; background: #fff; padding: 8px; border-radius: 4px; border: 1px solid #ddd; max-height: 100px; overflow-y: auto;">${token}</code>
+                    <button class="btn" style="margin-top: 10px; padding: 8px 16px; font-size: 14px;" onclick="navigator.clipboard.writeText('${token}').then(() => alert('Token copied to clipboard!'))">📋 Copy Token</button>
+                  </div>
+                `;
+              } else {
+                throw new Error('No tenant data returned');
+              }
+            } else {
+              const errorText = await response.text().catch(() => '');
+              throw new Error(`API returned ${response.status}: ${errorText}`);
+            }
+
+          } catch (error) {
+            console.error('Connection test error:', error);
+            resultDiv.innerHTML = `
+              <div class="error-message">
+                ✗ Connection test failed: ${error.message}
+              </div>
+            `;
+          }
+        }
+
+        async disconnect() {
+          // Clear Zoho session
+          await this.clearZohoSession();
+          
+          // Clear refresh token from localStorage
+          localStorage.removeItem(STORAGE_KEYS.refreshToken);
+          
+          console.log('✓ Disconnected from SideDrawer');
+          this.showDisconnectedStatus();
+        }
+
+        async saveTokens(tokenData) {
+          // Store access token in Zoho session (shared across widgets)
+          const expiresAt = Date.now() + (tokenData.expires_in * 1000);
+          
+          const sessionData = {
+            accessToken: tokenData.access_token,
+            expiresAt: expiresAt,
+            tokenType: tokenData.token_type || 'Bearer'
+          };
+          
+          await this.setZohoSession(sessionData);
+          
+          // Store refresh token in localStorage (persistent)
+          if (tokenData.refresh_token) {
+            localStorage.setItem(STORAGE_KEYS.refreshToken, tokenData.refresh_token);
+            console.log('✓ Refresh token stored for silent refresh');
+          }
+        }
+
+        async getAccessToken() {
+          const session = await this.getZohoSession();
+          return session ? session.accessToken : null;
+        }
+
+        getRefreshToken() {
+          return localStorage.getItem(STORAGE_KEYS.refreshToken);
+        }
+
+        isTokenExpired(expiresAt) {
+          if (!expiresAt) return true;
+          // Add 5 minute buffer before expiry
+          const bufferTime = 5 * 60 * 1000;
+          return Date.now() >= (parseInt(expiresAt) - bufferTime);
+        }
+
+        cleanupOAuthState() {
+          localStorage.removeItem(STORAGE_KEYS.codeVerifier);
+        }
+
+        // PKCE Helper Functions
+        generateCodeVerifier() {
+          const array = new Uint8Array(32);
+          crypto.getRandomValues(array);
+          return this.base64UrlEncode(array);
+        }
+
+        async generateCodeChallenge(codeVerifier) {
+          const encoder = new TextEncoder();
+          const data = encoder.encode(codeVerifier);
+          const hash = await crypto.subtle.digest('SHA-256', data);
+          return this.base64UrlEncode(new Uint8Array(hash));
+        }
+
+        base64UrlEncode(array) {
+          return btoa(String.fromCharCode.apply(null, array))
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
+        }
+
+        generateRandomString(length) {
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+          let result = '';
+          for (let i = 0; i < length; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+          }
+          return result;
+        }
+      }
+
+      // Initialize auth manager
+      const auth = new SideDrawerAuth();
+    </script>
+  </body>
+</html>
