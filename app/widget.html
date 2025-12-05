@@ -538,12 +538,15 @@
                   tokenRequestBody.client_secret = OAUTH_CONFIG.clientSecret;
                 }
                 
-                console.log('Token request body:', { 
+                console.log('🔍 Full token request (before sending):', tokenRequestBody);
+                console.log('Token request body (sanitized):', { 
                   ...tokenRequestBody, 
                   client_secret: tokenRequestBody.client_secret ? '***' : 'Not included', 
                   code: code.substring(0, 20) + '...',
                   code_verifier: codeVerifier.substring(0, 20) + '...' + codeVerifier.substring(codeVerifier.length - 10)
                 });
+                console.log('🌐 Posting to:', OAUTH_CONFIG.tokenEndpoint);
+                console.log('📍 Current origin:', window.location.origin);
 
                 const tokenResponse = await fetch(OAUTH_CONFIG.tokenEndpoint, {
                   method: 'POST',
