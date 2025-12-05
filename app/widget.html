@@ -581,7 +581,7 @@
                 document.getElementById('app-content').innerHTML = `
                   <div class="success-message">
                     ✓ Authentication successful!
-                    <br><small>Closing window...</small>
+                    <br><small>Check console for details. Close this window manually.</small>
                   </div>
                 `;
                 
@@ -597,13 +597,14 @@
                   console.warn('⚠ Parent window not available');
                 }
                 
-                // Clean up and close
+                // Clean up
                 localStorage.removeItem(STORAGE_KEYS.codeVerifier);
                 sessionStorage.removeItem(STORAGE_KEYS.codeVerifier);
-                setTimeout(() => {
-                  console.log('Closing popup...');
-                  window.close();
-                }, 1000);
+                // KEEP POPUP OPEN FOR DEBUGGING - don't auto-close
+                // setTimeout(() => {
+                //   console.log('Closing popup...');
+                //   window.close();
+                // }, 1000);
                 
               } catch (error) {
                 console.error('❌ OAuth popup error:', error);
@@ -614,7 +615,7 @@
                   <div class="error-message">
                     ✗ Authentication failed
                     <br><small>${error.message}</small>
-                    <br><small style="margin-top: 10px; display: block;">Check browser console for details. Window will close in 5 seconds...</small>
+                    <br><small style="margin-top: 10px; display: block;">Check browser console for details. Close this window manually when done.</small>
                   </div>
                 `;
                 
@@ -625,7 +626,8 @@
                     error: error.message
                   }, window.location.origin);
                 }
-                setTimeout(() => window.close(), 5000);
+                // KEEP POPUP OPEN FOR DEBUGGING - don't auto-close
+                // setTimeout(() => window.close(), 5000);
               }
               return;
             } else {
