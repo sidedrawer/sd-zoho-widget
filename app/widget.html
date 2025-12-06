@@ -269,10 +269,10 @@
             if (typeof ZOHO !== 'undefined' && ZOHO.embeddedApp) {
               console.log('Zoho SDK detected, initializing...');
               
-              // Add timeout to prevent hanging when not in Zoho CRM
+              // Increased timeout to allow SDK to initialize when loaded as external URL in Web Tab
               const initPromise = ZOHO.embeddedApp.init();
               const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Zoho SDK init timeout')), 3000)
+                setTimeout(() => reject(new Error('Zoho SDK init timeout')), 15000)
               );
               
               await Promise.race([initPromise, timeoutPromise]);
