@@ -246,6 +246,7 @@
       console.log('  Client ID:', OAUTH_CONFIG.clientId ? 'Set' : 'NOT SET');
       console.log('  Redirect URI:', OAUTH_CONFIG.redirectUri);
       console.log('  Is OAuth Callback:', isOAuthCallback);
+      console.log('  localStorage sd_config_client_id:', localStorage.getItem('sd_config_client_id'));
 
       // Storage keys
       const STORAGE_KEYS = {
