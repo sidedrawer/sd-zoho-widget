@@ -264,31 +264,31 @@
         }
 
         async initZoho() {
-          console.log('🚀 Starting Zoho initialization...');
-          console.log('  typeof ZOHO:', typeof ZOHO);
-          console.log('  ZOHO.embeddedApp:', typeof ZOHO !== 'undefined' ? typeof ZOHO.embeddedApp : 'N/A');
-          console.log('  ZOHO.CRM:', typeof ZOHO !== 'undefined' ? typeof ZOHO.CRM : 'N/A');
-          console.log('  ZOHO.CRM.API:', typeof ZOHO !== 'undefined' && ZOHO.CRM ? typeof ZOHO.CRM.API : 'N/A');
+          // When loaded in Zoho, respond to postMessage requests for session data
+          window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'REQUEST_SIDEDRAWER_SESSION') {
+              console.log('📥 Received session request from parent window');
+              const session = localStorage.getItem('sdSession');
+              if (session) {
+                try {
+                  const sessionData = JSON.parse(session);
+                  window.parent.postMessage({
+                    type: 'SIDEDRAWER_SESSION_RESPONSE',
+                    session: sessionData
+                  }, '*');
+                  console.log('📤 Sent session to parent window');
+                } catch (e) {
+                  console.error('Failed to parse/send session:', e);
+                }
+              } else {
+                console.log('⚠ No session available to send');
+              }
+            }
+          });
+          
+          console.log('✅ Session bridge ready (localStorage only, no Zoho SDK needed)');
           
           try {
-            // Check if Zoho CRM API is available (works even without calling init for external URLs)
-            if (typeof ZOHO !== 'undefined' && ZOHO.CRM && ZOHO.CRM.API) {
-              console.log('✅ ZOHO.CRM.API detected - skipping init() for external URL compatibility');
-              this.zohoInitialized = true;
-              
-              // Try to load Zoho configuration (may fail for external URLs, that's OK)
-              try {
-                await this.loadZohoConfig();
-              } catch (configError) {
-                console.warn('⚠ Could not load Zoho config (expected for external URLs):', configError.message);
-              }
-            } else {
-              console.warn('⚠ Zoho SDK not available, using localStorage fallback');
-            }
-          } catch (error) {
-            console.error('❌ Zoho initialization failed:', error.message);
-            this.zohoInitialized = false;
-          } finally {
             // Set up message listener for OAuth popup callback
             window.addEventListener('message', async (event) => {
               console.log('📨 Parent received message:', event.data?.type || 'unknown');
@@ -333,6 +333,8 @@
             console.log('Proceeding with initialization (Zoho initialized:', this.zohoInitialized, ')');
             console.log('OAuth Redirect URI:', OAUTH_CONFIG.redirectUri);
             this.init();
+          } catch (error) {
+            console.error('Initialization error:', error);
           }
         }
 
@@ -379,78 +381,21 @@
           }
         }
 
-        // Zoho Session Storage Methods
+        // Simple localStorage-only session management
         async setZohoSession(data) {
-          console.log('🔍 Attempting to store session...');
-          console.log('  ZOHO available:', typeof ZOHO !== 'undefined');
-          console.log('  ZOHO.CRM available:', typeof ZOHO !== 'undefined' && typeof ZOHO.CRM !== 'undefined');
-          console.log('  ZOHO.CRM.API available:', typeof ZOHO !== 'undefined' && ZOHO.CRM && typeof ZOHO.CRM.API !== 'undefined');
-          
-          // ALWAYS try Zoho API first, even if init failed/timed out
-          if (typeof ZOHO !== 'undefined' && ZOHO.CRM && ZOHO.CRM.API) {
-            try {
-              console.log('🔄 Calling ZOHO.CRM.API.setVariable...');
-              const result = await ZOHO.CRM.API.setVariable({ key: ZOHO_SESSION_KEY, value: JSON.stringify(data) });
-              console.log('✓ ZOHO.CRM.API.setVariable result:', result);
-              console.log('✓ Stored in Zoho session:', ZOHO_SESSION_KEY);
-              // Also store in localStorage as backup
-              localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
-              return true;
-            } catch (error) {
-              console.error('❌ ZOHO.CRM.API.setVariable FAILED:', error);
-              console.error('Error details:', JSON.stringify(error));
-              // Fallback to localStorage
-              localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
-              return false;
-            }
-          } else {
-            console.warn('⚠ Zoho API not available, using localStorage only');
-            // Fallback to localStorage
-            localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
-            return false;
-          }
+          localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
+          console.log('✓ Stored session in localStorage');
+          return true;
         }
 
         async getZohoSession() {
-          console.log('🔍 Attempting to retrieve session...');
-          
-          // ALWAYS try Zoho API first
-          if (typeof ZOHO !== 'undefined' && ZOHO.CRM && ZOHO.CRM.API) {
-            try {
-              console.log('🔄 Calling ZOHO.CRM.API.getVariable...');
-              const result = await ZOHO.CRM.API.getVariable(ZOHO_SESSION_KEY);
-              console.log('📥 ZOHO.CRM.API.getVariable result:', result);
-              if (result && result[ZOHO_SESSION_KEY]) {
-                console.log('✓ Retrieved from Zoho session');
-                return JSON.parse(result[ZOHO_SESSION_KEY]);
-              }
-              console.log('⚠ Zoho session empty, trying localStorage...');
-              const data = localStorage.getItem(ZOHO_SESSION_KEY);
-              return data ? JSON.parse(data) : null;
-            } catch (error) {
-              console.error('❌ ZOHO.CRM.API.getVariable FAILED:', error);
-              // Fallback to localStorage
-              const data = localStorage.getItem(ZOHO_SESSION_KEY);
-              return data ? JSON.parse(data) : null;
-            }
-          } else {
-            console.warn('⚠ Zoho API not available, using localStorage only');
-            // Fallback to localStorage
-            const data = localStorage.getItem(ZOHO_SESSION_KEY);
-            return data ? JSON.parse(data) : null;
-          }
+          const data = localStorage.getItem(ZOHO_SESSION_KEY);
+          return data ? JSON.parse(data) : null;
         }
 
         async clearZohoSession() {
-          if (this.zohoInitialized) {
-            try {
-              await ZOHO.CRM.API.setVariable({ key: ZOHO_SESSION_KEY, value: null });
-              console.log('✓ Cleared Zoho session');
-            } catch (error) {
-              console.error('Failed to clear Zoho session:', error);
-            }
-          }
           localStorage.removeItem(ZOHO_SESSION_KEY);
+          console.log('✓ Cleared session from localStorage');
         }
 
         async init() {
@@ -1027,17 +972,6 @@
           console.log('  Expires at:', new Date(expiresAt).toISOString());
           
           await this.setZohoSession(sessionData);
-          
-          // Broadcast session to parent window (for cross-widget communication)
-          try {
-            window.parent.postMessage({
-              type: 'SIDEDRAWER_SESSION_UPDATE',
-              session: sessionData
-            }, '*');
-            console.log('📤 Session broadcasted to parent window');
-          } catch (e) {
-            console.warn('Could not broadcast session:', e);
-          }
           
           // Store refresh token in localStorage (persistent)
           if (tokenData.refresh_token) {
