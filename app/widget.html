@@ -219,16 +219,18 @@
       const urlParams = new URLSearchParams(window.location.search);
       const isOAuthCallback = urlParams.has('code') || urlParams.has('error');
       
-      // Helper to get config param (from URL or localStorage)
+      // Helper to get config param (from URL or sessionStorage)
       function getConfigParam(key) {
-        // If not OAuth callback and URL has param, store it in localStorage
-        if (!isOAuthCallback && urlParams.has(key)) {
+        // If URL has param, use and store it
+        if (urlParams.has(key)) {
           const value = urlParams.get(key);
-          localStorage.setItem('sd_config_' + key, value);
+          if (!isOAuthCallback) {
+            sessionStorage.setItem('sd_config_' + key, value);
+          }
           return value;
         }
-        // Otherwise try localStorage (persists across popups)
-        return localStorage.getItem('sd_config_' + key) || null;
+        // Otherwise try sessionStorage
+        return sessionStorage.getItem('sd_config_' + key) || null;
       }
       
       // OAuth2 Configuration (will be updated with Zoho config if available)
@@ -246,7 +248,6 @@
       console.log('  Client ID:', OAUTH_CONFIG.clientId ? 'Set' : 'NOT SET');
       console.log('  Redirect URI:', OAUTH_CONFIG.redirectUri);
       console.log('  Is OAuth Callback:', isOAuthCallback);
-      console.log('  localStorage sd_config_client_id:', localStorage.getItem('sd_config_client_id'));
 
       // Storage keys
       const STORAGE_KEYS = {
@@ -343,9 +344,8 @@
               console.log('✓ Loaded Zoho widget variables:', Object.keys(config));
               
               // Redirect URI (REQUIRED in production)
-              if (config.oauth_redirect_uri && config.oauth_redirect_uri.trim()) {
-                OAUTH_CONFIG.redirectUri = config.oauth_redirect_uri.trim();
-                localStorage.setItem('sd_config_redirect_uri', OAUTH_CONFIG.redirectUri);
+              if (config.redirect_uri && config.redirect_uri.trim()) {
+                OAUTH_CONFIG.redirectUri = config.redirect_uri.trim();
                 console.log('✓ Using configured redirect URI:', OAUTH_CONFIG.redirectUri);
               } else {
                 console.warn('⚠ No redirect URI configured - using auto-detection (may not work behind proxies)');
@@ -355,7 +355,6 @@
                 // Client ID (can also come from URL params)
                 if (config.client_id && config.client_id.trim()) {
                   OAUTH_CONFIG.clientId = config.client_id.trim();
-                  localStorage.setItem('sd_config_client_id', OAUTH_CONFIG.clientId);
                   console.log('✓ Client ID loaded from Zoho config');
                 }
               

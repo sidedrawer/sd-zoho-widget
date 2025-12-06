@@ -9,7 +9,7 @@
   },
   "variables": [
     {
-      "name": "oauth_redirect_uri",
+      "name": "redirect_uri",
       "label": "OAuth Redirect URI",
       "defaultValue": "",
       "isRequired": true,
