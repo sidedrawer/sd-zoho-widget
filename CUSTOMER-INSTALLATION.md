@@ -8,102 +8,166 @@
 
 ## Installation Steps
 
-### 1. Find Your Widget URL
+### 1. Create SideDrawer OAuth Application
 
-After installing the widget in Zoho CRM:
+1. Log into SideDrawer:
+   - **Sandbox**: https://auth-sbx.sidedrawersbx.com
+   - **Production**: https://auth.sidedrawer.com
 
-1. Open the browser DevTools (F12)
-2. Run this in the console:
-   ```javascript
-   const iframe = document.querySelector('iframe[id="externalIframe"]');
-   console.log('Widget URL:', iframe?.src);
-   ```
-3. Copy the full URL (will look like `https://creatorextn.zoho.com/crm/org[YOUR_ORG_ID]/...`)
-
-**IMPORTANT**: This is the URL you'll use as the OAuth redirect URI.
-
-### 2. Create SideDrawer OAuth Application
-
-1. Log into SideDrawer (sandbox: https://auth-sbx.sidedrawersbx.com or production: https://auth.sidedrawer.com)
 2. Navigate to **Settings** → **OAuth Applications**
+
 3. Click **Create New Application**
+
 4. Fill in the form:
-   - **Name**: `Zoho CRM Integration - [Your Company]`
-   - **Redirect URI**: Paste the widget URL from step 1
-   - **Grant Types**: Check "Authorization Code"
-   - **PKCE**: Enable (required)
-5. Click **Save**
-6. **Copy** the generated **Client ID** and **Client Secret**
-
-### 3. Configure the Widget in Zoho
-
-1. In Zoho CRM, go to **Setup** → **Developer Hub** → **Widgets**
-2. Find the **SideDrawer Integration** widget in the list
-3. Click the **Settings** icon (⚙️) or **Configure** button next to it
-4. Fill in the configuration:
-
-   | Field | Value | Example |
-   |-------|-------|---------|
-   | **OAuth Redirect URI** | Your widget URL from step 1 | `https://creatorextn.zoho.com/crm/org110001007505/tab/WebTab13` |
-   | **Client ID** | From SideDrawer OAuth app | `AYKueA9CuMXe7fMj8QfJM722F98NwZyA` |
-   | **Client Secret** | From SideDrawer OAuth app | `Dwd47Osd6secRvrrfC31ng2oWGGuiwnr...` |
-   | **Environment** | `sandbox` or `production` | `sandbox` (for testing) |
+   - **Name**: `Zoho CRM Integration - [Your Company Name]`
+   - **Redirect URI**: `https://sidedrawer.github.io/SideDrawer/app/widget.html`
+   - **Grant Types**: ✓ Authorization Code
+   - **PKCE**: ✓ Enabled (required)
 
 5. Click **Save**
 
-### 4. Test the Integration
+6. **Copy and save** these credentials:
+   - **Client ID** (example: `AYKueA9CuMXe7fMj8QfJM722F98NwZyA`)
+   - **Client Secret** (example: `Dwd47Osd6secRvrrfC31ng2oWGGuiwnr55IGm0qRxHsgiDtYSwu8GMEEHKScksTD`)
+
+### 2. Add Widget to Zoho CRM
+
+1. In Zoho CRM, go to **Setup** → **Customization** → **Modules and Fields**
+
+2. Select the module where you want the widget (or create a custom tab)
+
+3. Click **Web Tab** to add a new web tab widget
+
+4. Configure the web tab:
+   - **Name**: `SideDrawer`
+   - **URL**: Build your URL using this template:
+
+**For Sandbox:**
+```
+https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
+```
+
+**For Production:**
+```
+https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=production
+```
+
+**Example (using sample credentials):**
+```
+https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=AYKueA9CuMXe7fMj8QfJM722F98NwZyA&client_secret=Dwd47Osd6secRvrrfC31ng2oWGGuiwnr55IGm0qRxHsgiDtYSwu8GMEEHKScksTD&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
+```
+
+5. Click **Save**
+
+### 3. Test the Integration
 
 1. Open the SideDrawer widget tab in Zoho CRM
-2. Click **Connect to SideDrawer**
-3. A popup window should open asking you to log into SideDrawer
-4. Log in with your SideDrawer credentials
-5. Authorize the application
-6. The popup should close and the widget should show **Connected** status
 
-### 5. Verify Connection
+2. You should see the widget interface with a **"Connect to SideDrawer"** button
+
+3. Click **Connect to SideDrawer**
+
+4. A popup window opens with the SideDrawer login page
+
+5. Log in with your SideDrawer credentials
+
+6. Click **Authorize** to grant permissions
+
+7. The popup closes automatically
+
+8. The widget now shows **"Connected to SideDrawer"** ✅
+
+### 4. Verify Connection
 
 After connecting, the widget should display:
 - ✅ **Connected to SideDrawer**
-- Your tenant information
+- Your tenant information (Tenant ID, Brand Code, Region)
 - Token expiry time
-- Test connection button
+- **Test Connection** button
 
 Click **Test Connection** to verify the integration is working properly.
 
+## Understanding the URL Parameters
+
+The widget URL includes these configuration parameters:
+
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| `client_id` | Your SideDrawer OAuth Client ID | ✓ Yes |
+| `client_secret` | Your SideDrawer OAuth Client Secret | ✓ Yes |
+| `redirect_uri` | Where OAuth redirects after login | ✓ Yes |
+| `environment` | `sandbox` or `production` | ✓ Yes |
+
+**Why URL parameters?**
+
+For externally-hosted widgets (like this one on GitHub Pages), URL parameters are the **only** way to configure credentials in Zoho CRM. This is the standard approach used by other Zoho integrations (HeyAdvisor, Cloven, etc.).
+
 ## Troubleshooting
+
+### "Client ID not configured" Error
+
+**Cause**: URL parameters are missing or incorrect
+
+**Solution**:
+1. Verify your widget URL includes all 4 parameters: `client_id`, `client_secret`, `redirect_uri`, `environment`
+2. Check for typos (parameter names are case-sensitive)
+3. Ensure there are no line breaks in the URL
+4. Try copying the example URL and replacing just the credentials
 
 ### "Popup blocked" Error
 
+**Cause**: Browser is blocking the OAuth popup
+
 **Solution**: Allow popups for your Zoho CRM domain
-- Chrome: Click the popup icon in the address bar → Always allow
-- Firefox: Click Preferences → Allow popups from this site
+- **Chrome**: Click the popup icon in the address bar → "Always allow popups from crm.zohocloud.ca"
+- **Firefox**: Click "Preferences" → "Allow popups from this site"
+- **Safari**: Safari → Preferences → Websites → Pop-up Windows → Allow for Zoho CRM
 
 ### "Redirect URI mismatch" Error
 
 **Cause**: The redirect URI in SideDrawer doesn't match the widget URL
 
 **Solution**:
-1. Double-check the widget URL (step 1)
-2. Ensure the SideDrawer OAuth app has the **exact** same URL
-3. No trailing slashes, must match exactly
+1. The redirect URI in SideDrawer must be **exactly**: `https://sidedrawer.github.io/SideDrawer/app/widget.html`
+2. No trailing slashes
+3. No query parameters (the `?client_id=...` part should NOT be in SideDrawer config)
+4. Case-sensitive match
 
-### "Invalid client credentials" Error
+### "Invalid client credentials" / 401 Unauthorized Error
 
-**Cause**: Wrong Client ID or Client Secret
+**Cause**: Wrong Client ID or Client Secret, or environment mismatch
 
 **Solution**:
-1. Verify you copied the credentials correctly from SideDrawer
-2. No extra spaces or line breaks
-3. Make sure you're using the right environment (sandbox vs production)
+1. Verify you copied the credentials correctly from SideDrawer (copy-paste to avoid typos)
+2. Ensure no extra spaces or line breaks in the URL
+3. Make sure you're using the right `environment`:
+   - Use `environment=sandbox` for SideDrawer sandbox credentials
+   - Use `environment=production` for SideDrawer production credentials
+4. Verify PKCE is enabled in your SideDrawer OAuth app
+5. Add `https://sidedrawer.github.io` to "Allowed Web Origins" in Auth0 settings
 
 ### Widget Stuck on "Initializing..."
 
-**Cause**: Configuration not loaded or incorrect
+**Cause**: Configuration not loaded properly
 
 **Solution**:
-1. Refresh the page
-2. Check browser console for errors (F12)
-3. Verify all configuration fields are filled in correctly
+1. Open browser console (F12) and check for errors
+2. Verify the widget URL is correct and complete
+3. Clear browser storage:
+   - Open browser console (F12)
+   - Type: `localStorage.clear()`
+   - Reload the page
+4. Verify all URL parameters are present
+
+### Credentials Lost After Reconnecting
+
+**Cause**: Browser localStorage is being cleared
+
+**Solution**:
+1. Don't use Incognito/Private browsing mode
+2. Check browser privacy settings allow localStorage
+3. Disable browser extensions that clear storage
+4. Verify cookies are enabled for the domain
 
 ## Support
 
@@ -113,17 +177,54 @@ For technical support, contact:
 
 ## Security Notes
 
-- **Client Secret** is stored securely by Zoho and never exposed in the browser
-- **Access Tokens** are stored in Zoho session storage (temporary)
-- **Refresh Tokens** are stored in browser localStorage (persistent but encrypted by browser)
-- All OAuth communication uses HTTPS with PKCE for additional security
+### URL Parameters and Client Secret
+
+**Question**: Is it safe to include `client_secret` in the URL?
+
+**Answer**: Yes, for this specific use case:
+
+1. **Not Publicly Accessible**: The widget URL is only accessible to authenticated Zoho CRM users within your organization
+2. **Industry Standard**: This is how other Zoho CRM integrations (HeyAdvisor, Cloven) handle external widgets
+3. **Additional Security with PKCE**: The OAuth flow uses PKCE (Proof Key for Code Exchange) which adds an extra layer of security beyond just the client secret
+4. **HTTPS**: All communication is encrypted via HTTPS
+5. **Short-lived Tokens**: Access tokens are short-lived and automatically refreshed
+
+### What Gets Stored Where
+
+- **URL Parameters**: Client ID and Secret are read once and stored in browser localStorage
+- **Access Tokens**: Stored in browser localStorage (automatically encrypted by browser)
+- **Refresh Tokens**: Stored in browser localStorage for silent re-authentication
+- **OAuth Communication**: All requests use HTTPS with PKCE
+
+### Best Practices
+
+1. **Unique Credentials**: Use different OAuth applications for each customer/organization
+2. **Environment Separation**: Never use production credentials in sandbox, or vice versa
+3. **Regular Audits**: Periodically review which organizations have access to your SideDrawer data
+4. **Revoke Access**: If an employee leaves, you can revoke their SideDrawer access without affecting the integration
 
 ## Multi-Organization Deployment
 
-Each Zoho organization requires its own SideDrawer OAuth application because:
-- Each has a unique widget URL
-- OAuth redirect URIs must match exactly
-- This ensures security and isolation between organizations
+### Can I use the same OAuth app for multiple Zoho organizations?
 
-**Best Practice**: Create a separate SideDrawer OAuth app for each Zoho CRM customer/organization.
+**Yes!** Unlike some integrations, this widget uses the same redirect URI for all installations:
+- `https://sidedrawer.github.io/SideDrawer/app/widget.html`
+
+This means:
+- ✅ **You can use the same OAuth app** for multiple Zoho CRM organizations
+- ✅ **Simpler management** - one OAuth app, multiple deployments
+- ✅ **Each organization still isolated** - tokens are stored per-browser, per-user
+
+### Recommended Deployment Strategies
+
+**Option 1: Single OAuth App (Simpler)**
+- Create one OAuth app in SideDrawer
+- Use the same `client_id` and `client_secret` for all Zoho organizations
+- Easier to manage, single point of configuration
+
+**Option 2: Per-Customer OAuth Apps (More Secure)**
+- Create separate OAuth app for each customer/organization
+- Different credentials for each deployment
+- Better isolation, easier to revoke access for specific customers
+- Recommended for white-label or multi-tenant SaaS
 
