@@ -1003,6 +1003,17 @@
           
           await this.setZohoSession(sessionData);
           
+          // Broadcast session to parent window (for cross-widget communication)
+          try {
+            window.parent.postMessage({
+              type: 'SIDEDRAWER_SESSION_UPDATE',
+              session: sessionData
+            }, '*');
+            console.log('📤 Session broadcasted to parent window');
+          } catch (e) {
+            console.warn('Could not broadcast session:', e);
+          }
+          
           // Store refresh token in localStorage (persistent)
           if (tokenData.refresh_token) {
             localStorage.setItem(STORAGE_KEYS.refreshToken, tokenData.refresh_token);
