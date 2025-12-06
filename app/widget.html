@@ -264,20 +264,26 @@
         }
 
         async initZoho() {
+          console.log('🚀 Starting Zoho initialization...');
+          console.log('  typeof ZOHO:', typeof ZOHO);
+          console.log('  ZOHO.embeddedApp:', typeof ZOHO !== 'undefined' ? typeof ZOHO.embeddedApp : 'N/A');
+          console.log('  ZOHO.CRM:', typeof ZOHO !== 'undefined' ? typeof ZOHO.CRM : 'N/A');
+          console.log('  ZOHO.CRM.API:', typeof ZOHO !== 'undefined' && ZOHO.CRM ? typeof ZOHO.CRM.API : 'N/A');
+          
           try {
             // Initialize Zoho SDK if available
             if (typeof ZOHO !== 'undefined' && ZOHO.embeddedApp) {
-              console.log('Zoho SDK detected, initializing...');
+              console.log('⏳ Zoho SDK detected, calling init() with 15s timeout...');
               
               // Increased timeout to allow SDK to initialize when loaded as external URL in Web Tab
               const initPromise = ZOHO.embeddedApp.init();
               const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Zoho SDK init timeout')), 15000)
+                setTimeout(() => reject(new Error('Zoho SDK init timeout after 15s')), 15000)
               );
               
               await Promise.race([initPromise, timeoutPromise]);
               this.zohoInitialized = true;
-              console.log('✓ Zoho SDK initialized successfully');
+              console.log('✅ Zoho SDK init() completed successfully');
               
               // Load Zoho configuration
               await this.loadZohoConfig();
@@ -285,7 +291,8 @@
               console.warn('⚠ Zoho SDK not available, using localStorage fallback');
             }
           } catch (error) {
-            console.warn('⚠ Zoho SDK initialization failed, using localStorage fallback:', error.message);
+            console.error('❌ Zoho SDK init() failed:', error.message);
+            console.log('📝 Will attempt to use ZOHO.CRM.API directly (without init)');
             this.zohoInitialized = false;
           } finally {
             // Set up message listener for OAuth popup callback
@@ -411,21 +418,29 @@
         }
 
         async getZohoSession() {
-          if (this.zohoInitialized) {
+          console.log('🔍 Attempting to retrieve session...');
+          
+          // ALWAYS try Zoho API first
+          if (typeof ZOHO !== 'undefined' && ZOHO.CRM && ZOHO.CRM.API) {
             try {
+              console.log('🔄 Calling ZOHO.CRM.API.getVariable...');
               const result = await ZOHO.CRM.API.getVariable(ZOHO_SESSION_KEY);
+              console.log('📥 ZOHO.CRM.API.getVariable result:', result);
               if (result && result[ZOHO_SESSION_KEY]) {
                 console.log('✓ Retrieved from Zoho session');
                 return JSON.parse(result[ZOHO_SESSION_KEY]);
               }
-              return null;
+              console.log('⚠ Zoho session empty, trying localStorage...');
+              const data = localStorage.getItem(ZOHO_SESSION_KEY);
+              return data ? JSON.parse(data) : null;
             } catch (error) {
-              console.error('Failed to get Zoho session:', error);
+              console.error('❌ ZOHO.CRM.API.getVariable FAILED:', error);
               // Fallback to localStorage
               const data = localStorage.getItem(ZOHO_SESSION_KEY);
               return data ? JSON.parse(data) : null;
             }
           } else {
+            console.warn('⚠ Zoho API not available, using localStorage only');
             // Fallback to localStorage
             const data = localStorage.getItem(ZOHO_SESSION_KEY);
             return data ? JSON.parse(data) : null;
@@ -1012,6 +1027,10 @@
             expiresAt: expiresAt,
             tokenType: tokenData.token_type || 'Bearer'
           };
+          
+          console.log('💾 Saving session data...');
+          console.log('  Access token length:', tokenData.access_token?.length || 0);
+          console.log('  Expires at:', new Date(expiresAt).toISOString());
           
           await this.setZohoSession(sessionData);
           
