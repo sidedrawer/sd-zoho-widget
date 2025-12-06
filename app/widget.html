@@ -271,28 +271,22 @@
           console.log('  ZOHO.CRM.API:', typeof ZOHO !== 'undefined' && ZOHO.CRM ? typeof ZOHO.CRM.API : 'N/A');
           
           try {
-            // Initialize Zoho SDK if available
-            if (typeof ZOHO !== 'undefined' && ZOHO.embeddedApp) {
-              console.log('⏳ Zoho SDK detected, calling init() with 15s timeout...');
-              
-              // Increased timeout to allow SDK to initialize when loaded as external URL in Web Tab
-              const initPromise = ZOHO.embeddedApp.init();
-              const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Zoho SDK init timeout after 15s')), 15000)
-              );
-              
-              await Promise.race([initPromise, timeoutPromise]);
+            // Check if Zoho CRM API is available (works even without calling init for external URLs)
+            if (typeof ZOHO !== 'undefined' && ZOHO.CRM && ZOHO.CRM.API) {
+              console.log('✅ ZOHO.CRM.API detected - skipping init() for external URL compatibility');
               this.zohoInitialized = true;
-              console.log('✅ Zoho SDK init() completed successfully');
               
-              // Load Zoho configuration
-              await this.loadZohoConfig();
+              // Try to load Zoho configuration (may fail for external URLs, that's OK)
+              try {
+                await this.loadZohoConfig();
+              } catch (configError) {
+                console.warn('⚠ Could not load Zoho config (expected for external URLs):', configError.message);
+              }
             } else {
               console.warn('⚠ Zoho SDK not available, using localStorage fallback');
             }
           } catch (error) {
-            console.error('❌ Zoho SDK init() failed:', error.message);
-            console.log('📝 Will attempt to use ZOHO.CRM.API directly (without init)');
+            console.error('❌ Zoho initialization failed:', error.message);
             this.zohoInitialized = false;
           } finally {
             // Set up message listener for OAuth popup callback
