@@ -380,10 +380,13 @@
 
         // Zoho Session Storage Methods
         async setZohoSession(data) {
-          if (this.zohoInitialized) {
+          // ALWAYS try Zoho API first, even if init failed/timed out
+          if (typeof ZOHO !== 'undefined' && ZOHO.CRM && ZOHO.CRM.API) {
             try {
               await ZOHO.CRM.API.setVariable({ key: ZOHO_SESSION_KEY, value: JSON.stringify(data) });
               console.log('✓ Stored in Zoho session:', ZOHO_SESSION_KEY);
+              // Also store in localStorage as backup
+              localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
               return true;
             } catch (error) {
               console.error('Failed to store in Zoho session:', error);
