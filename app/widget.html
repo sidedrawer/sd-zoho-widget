@@ -380,21 +380,30 @@
 
         // Zoho Session Storage Methods
         async setZohoSession(data) {
+          console.log('🔍 Attempting to store session...');
+          console.log('  ZOHO available:', typeof ZOHO !== 'undefined');
+          console.log('  ZOHO.CRM available:', typeof ZOHO !== 'undefined' && typeof ZOHO.CRM !== 'undefined');
+          console.log('  ZOHO.CRM.API available:', typeof ZOHO !== 'undefined' && ZOHO.CRM && typeof ZOHO.CRM.API !== 'undefined');
+          
           // ALWAYS try Zoho API first, even if init failed/timed out
           if (typeof ZOHO !== 'undefined' && ZOHO.CRM && ZOHO.CRM.API) {
             try {
-              await ZOHO.CRM.API.setVariable({ key: ZOHO_SESSION_KEY, value: JSON.stringify(data) });
+              console.log('🔄 Calling ZOHO.CRM.API.setVariable...');
+              const result = await ZOHO.CRM.API.setVariable({ key: ZOHO_SESSION_KEY, value: JSON.stringify(data) });
+              console.log('✓ ZOHO.CRM.API.setVariable result:', result);
               console.log('✓ Stored in Zoho session:', ZOHO_SESSION_KEY);
               // Also store in localStorage as backup
               localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
               return true;
             } catch (error) {
-              console.error('Failed to store in Zoho session:', error);
+              console.error('❌ ZOHO.CRM.API.setVariable FAILED:', error);
+              console.error('Error details:', JSON.stringify(error));
               // Fallback to localStorage
               localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
               return false;
             }
           } else {
+            console.warn('⚠ Zoho API not available, using localStorage only');
             // Fallback to localStorage
             localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
             return false;
