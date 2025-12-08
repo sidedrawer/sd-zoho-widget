@@ -14,8 +14,8 @@
       }
 
       body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        background: #f5f7fa;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+        background: #f9fafb;
         padding: 20px;
       }
 
@@ -23,9 +23,9 @@
         max-width: 800px;
         margin: 0 auto;
         background: white;
-        border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        padding: 40px;
       }
 
       .header {
@@ -34,32 +34,34 @@
       }
 
       .header h1 {
-        color: #2c3e50;
-        font-size: 28px;
-        margin-bottom: 10px;
+        color: #1f2937;
+        font-size: 30px;
+        font-weight: 700;
+        margin-bottom: 8px;
       }
 
       .header p {
-        color: #7f8c8d;
-        font-size: 14px;
+        color: #6b7280;
+        font-size: 15px;
+        font-weight: 400;
       }
 
       .status-card {
-        background: #f8f9fa;
-        border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 20px;
-        border-left: 4px solid #3498db;
+        background: #f9fafb;
+        border-radius: 6px;
+        padding: 24px;
+        margin-bottom: 24px;
+        border-left: 4px solid #1e88e5;
       }
 
       .status-card.connected {
-        border-left-color: #27ae60;
-        background: #eafaf1;
+        border-left-color: #10b981;
+        background: #ecfdf5;
       }
 
       .status-card.error {
-        border-left-color: #e74c3c;
-        background: #fadbd8;
+        border-left-color: #dc2626;
+        background: #fef2f2;
       }
 
       .status-indicator {
@@ -77,8 +79,7 @@
       }
 
       .status-dot.connected {
-        background: #27ae60;
-        box-shadow: 0 0 8px rgba(39, 174, 96, 0.5);
+        display: none; /* Hide the dot when connected, text has bullet point */
       }
 
       .status-dot.error {
@@ -87,27 +88,27 @@
 
       .status-text {
         font-weight: 600;
-        color: #2c3e50;
+        color: #111827;
+        font-size: 17px;
       }
 
       .btn {
         display: inline-block;
-        padding: 12px 24px;
-        background: #3498db;
+        padding: 11px 20px;
+        background: #1e88e5;
         color: white;
         border: none;
-        border-radius: 6px;
-        font-size: 16px;
+        border-radius: 4px;
+        font-size: 15px;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.3s;
+        transition: all 0.2s;
         text-decoration: none;
       }
 
       .btn:hover {
-        background: #2980b9;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        background: #1976d2;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.15);
       }
 
       .btn:active {
@@ -115,42 +116,49 @@
       }
 
       .btn.btn-success {
-        background: #27ae60;
+        background: #FF8C42;
       }
 
       .btn.btn-success:hover {
-        background: #229954;
+        background: #ff7a28;
       }
 
       .btn.btn-danger {
-        background: #e74c3c;
+        background: #dc2626;
       }
 
       .btn.btn-danger:hover {
-        background: #c0392b;
+        background: #b91c1c;
       }
 
       .info-section {
         margin-top: 20px;
-        padding: 15px;
-        background: #f8f9fa;
+        padding: 20px;
+        background: #f9fafb;
         border-radius: 6px;
         font-size: 14px;
-        color: #555;
+        color: #4b5563;
+        line-height: 1.6;
       }
 
       .info-section strong {
-        color: #2c3e50;
+        color: #111827;
+        font-weight: 600;
+      }
+
+      .info-section p {
+        margin: 8px 0;
       }
 
       .loading {
         text-align: center;
         padding: 40px;
+        color: #6b7280;
       }
 
       .spinner {
-        border: 3px solid #f3f3f3;
-        border-top: 3px solid #3498db;
+        border: 3px solid #e5e7eb;
+        border-top: 3px solid #1e88e5;
         border-radius: 50%;
         width: 40px;
         height: 40px;
@@ -164,20 +172,20 @@
       }
 
       .error-message {
-        background: #fadbd8;
-        border: 1px solid #e74c3c;
-        color: #c0392b;
-        padding: 15px;
+        background: #fef2f2;
+        border: 1px solid #fca5a5;
+        color: #991b1b;
+        padding: 16px;
         border-radius: 6px;
         margin-top: 15px;
         font-size: 14px;
       }
 
       .success-message {
-        background: #eafaf1;
-        border: 1px solid #27ae60;
-        color: #229954;
-        padding: 15px;
+        background: #ecfdf5;
+        border: 1px solid #86efac;
+        color: #065f46;
+        padding: 16px;
         border-radius: 6px;
         margin-top: 15px;
         font-size: 14px;
@@ -191,18 +199,18 @@
 
       .token-info {
         margin-top: 15px;
-        padding: 10px;
-        background: #f8f9fa;
+        padding: 16px;
+        background: #f9fafb;
         border-radius: 6px;
-        font-size: 12px;
-        color: #666;
+        font-size: 13px;
+        color: #6b7280;
       }
     </style>
   </head>
   <body>
     <div class="container">
       <div class="header">
-        <h1>🔐 SideDrawer Integration</h1>
+        <h1>SideDrawer Integration</h1>
         <p>Connect your Zoho CRM with SideDrawer</p>
       </div>
 
@@ -611,7 +619,7 @@
                 <div class="status-dot connected"></div>
                 <span class="status-text">Connected to SideDrawer</span>
               </div>
-              <p style="color: #555; font-size: 14px;">Your integration is active and ready to use.</p>
+              <p style="color: #6b7280; font-size: 14px;">Your integration is active and ready to use.</p>
             </div>
 
             <div class="info-section">
@@ -637,7 +645,7 @@
                 <div class="status-dot"></div>
                 <span class="status-text">Not Connected</span>
               </div>
-              <p style="color: #555; font-size: 14px;">Connect your SideDrawer account to enable the integration.</p>
+              <p style="color: #6b7280; font-size: 14px;">Connect your SideDrawer account to enable the integration.</p>
             </div>
 
             <div class="info-section">
@@ -645,7 +653,7 @@
               <p>SideDrawer is a secure document storage and sharing platform designed for financial advisors and their clients.</p>
               <br>
               <p><strong>This integration allows you to:</strong></p>
-              <ul style="margin-left: 20px; margin-top: 10px;">
+              <ul style="margin-left: 20px; margin-top: 10px; color: #4b5563;">
                 <li>Access SideDrawer documents directly from Zoho CRM</li>
                 <li>Share content with clients through SideDrawer</li>
                 <li>Manage client documents securely</li>
