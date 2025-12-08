@@ -100,9 +100,9 @@
       .btn {
         display: inline-block;
         padding: 11px 20px;
-        background: #1e88e5;
-        color: white;
-        border: none;
+        background: #f3f4f6;
+        color: #374151;
+        border: 1px solid #d1d5db;
         border-radius: 4px;
         font-size: 15px;
         font-weight: 600;
@@ -112,8 +112,8 @@
       }
 
       .btn:hover {
-        background: #1976d2;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        background: #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
       }
 
       .btn:active {
@@ -122,37 +122,33 @@
 
       .btn.btn-success {
         background: #FF8C42;
+        color: white;
+        border-color: #FF8C42;
       }
 
       .btn.btn-success:hover {
         background: #ff7a28;
-      }
-
-      .btn.btn-danger {
-        background: #dc2626;
-      }
-
-      .btn.btn-danger:hover {
-        background: #b91c1c;
+        border-color: #ff7a28;
       }
 
       .info-section {
         margin-top: 20px;
-        padding: 20px 24px;
-        background: #f3f4f6;
+        padding: 20px;
+        background: #fff;
+        border: 1px solid #e5e7eb;
         border-radius: 6px;
         font-size: 14px;
-        color: #374151;
-        line-height: 1.7;
+        color: #4b5563;
+        line-height: 1.6;
       }
 
       .info-section strong {
-        color: #1f2937;
+        color: #111827;
         font-weight: 600;
       }
 
       .info-section p {
-        margin: 10px 0;
+        margin: 8px 0;
       }
 
       .loading {
@@ -627,16 +623,16 @@
               <p style="color: #6b7280; font-size: 14px; margin-top: 8px;">Your integration is active and ready to use.</p>
             </div>
 
-            <div class="info-section">
-              <p style="margin: 8px 0;"><strong>Status:</strong> <span style="color: #4b5563;">Authenticated</span></p>
-              <p style="margin: 8px 0;"><strong>Storage:</strong> <span style="color: #4b5563;">${this.zohoInitialized ? 'Zoho Session (shared across widgets)' : 'localStorage (fallback)'}</span></p>
-              <p style="margin: 8px 0;"><strong>Token Expires:</strong> <span style="color: #4b5563;">${expiryDate.toLocaleString()}</span></p>
-              <p style="margin: 8px 0;"><strong>Silent Refresh:</strong> <span style="color: #4b5563;">${hasRefreshToken ? 'Enabled' : 'Disabled'}</span></p>
+            <div style="margin-top:20px;padding:20px;background:#fff;border:1px solid #e5e7eb;border-radius:6px">
+              <p style="margin:8px 0;color:#4b5563;font-size:14px"><strong style="color:#111827;font-weight:600">Status:</strong> Authenticated</p>
+              <p style="margin:8px 0;color:#4b5563;font-size:14px"><strong style="color:#111827;font-weight:600">Storage:</strong> ${this.zohoInitialized ? 'Zoho Session (shared across widgets)' : 'localStorage (fallback)'}</p>
+              <p style="margin:8px 0;color:#4b5563;font-size:14px"><strong style="color:#111827;font-weight:600">Token Expires:</strong> ${expiryDate.toLocaleString()}</p>
+              <p style="margin:8px 0;color:#4b5563;font-size:14px"><strong style="color:#111827;font-weight:600">Silent Refresh:</strong> ${hasRefreshToken ? 'Enabled' : 'Disabled'}</p>
             </div>
 
             <div class="button-group">
-              <button class="btn btn-danger" onclick="auth.disconnect()">Disconnect</button>
-              <button class="btn" onclick="auth.testConnection()">Test Connection</button>
+              <button class="btn" onclick="auth.disconnect()">Disconnect</button>
+              <button class="btn btn-success" onclick="auth.testConnection()">Test Connection</button>
             </div>
 
             <div id="test-result"></div>
