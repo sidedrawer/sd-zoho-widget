@@ -265,6 +265,17 @@
       };
 
       const ZOHO_SESSION_KEY = 'sdSession'; // Zoho session storage key
+      
+      // Helper function to extract Auth0 domain from authorization endpoint
+      function getAuth0Domain() {
+        try {
+          const url = new URL(OAUTH_CONFIG.authorizationEndpoint);
+          return url.origin; // Returns https://auth-sbx.sidedrawersbx.com or https://auth.sidedrawer.com
+        } catch (e) {
+          console.error('Failed to parse Auth0 domain:', e);
+          return 'https://auth-sbx.sidedrawersbx.com'; // Fallback to sandbox
+        }
+      }
 
       class SideDrawerAuth {
         constructor() {
@@ -978,9 +989,11 @@
           
           // Clear Auth0 session by redirecting to logout endpoint
           // This ensures the user will be prompted to login again
-          const auth0LogoutUrl = `https://auth-sbx.sidedrawersbx.com/v2/logout?client_id=${OAUTH_CONFIG.clientId}&returnTo=${encodeURIComponent(OAUTH_CONFIG.redirectUri)}`;
+          // Dynamically use the correct Auth0 domain (sandbox or production)
+          const auth0Domain = getAuth0Domain();
+          const auth0LogoutUrl = `${auth0Domain}/v2/logout?client_id=${OAUTH_CONFIG.clientId}&returnTo=${encodeURIComponent(OAUTH_CONFIG.redirectUri)}`;
           
-          console.log('✓ Redirecting to Auth0 logout...');
+          console.log('✓ Redirecting to Auth0 logout:', auth0Domain);
           
           // Redirect to Auth0 logout, which will then redirect back to our app
           window.location.href = auth0LogoutUrl;
