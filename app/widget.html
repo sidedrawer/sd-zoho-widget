@@ -956,14 +956,59 @@
         }
 
         async disconnect() {
+          console.log('🔓 Disconnecting from SideDrawer...');
+          
           // Clear Zoho session
           await this.clearZohoSession();
           
           // Clear refresh token from localStorage
           localStorage.removeItem(STORAGE_KEYS.refreshToken);
           
-          console.log('✓ Disconnected from SideDrawer');
-          this.showDisconnectedStatus();
+          // Clear all Auth0 cookies (including sidedrawer_refresh_token)
+          this.clearAllCookies();
+          
+          // Clear all localStorage items related to SideDrawer and Auth0
+          Object.keys(localStorage).forEach(key => {
+            if (key.includes('sidedrawer') || key.includes('auth0') || key.includes('@@') || key.includes('_legacy')) {
+              localStorage.removeItem(key);
+            }
+          });
+          
+          console.log('✓ Local session cleared');
+          
+          // Clear Auth0 session by redirecting to logout endpoint
+          // This ensures the user will be prompted to login again
+          const auth0LogoutUrl = `https://auth-sbx.sidedrawersbx.com/v2/logout?client_id=${OAUTH_CONFIG.clientId}&returnTo=${encodeURIComponent(OAUTH_CONFIG.redirectUri)}`;
+          
+          console.log('✓ Redirecting to Auth0 logout...');
+          
+          // Redirect to Auth0 logout, which will then redirect back to our app
+          window.location.href = auth0LogoutUrl;
+        }
+        
+        clearAllCookies() {
+          // Get all cookies
+          const cookies = document.cookie.split(';');
+          
+          // Clear each cookie by setting expiry to past date
+          for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i];
+            const eqPos = cookie.indexOf('=');
+            const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+            
+            // Clear for current path and domain
+            document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+            document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + window.location.hostname;
+            
+            // Try to clear for parent domain (e.g., .sidedrawer.com)
+            const domainParts = window.location.hostname.split('.');
+            if (domainParts.length > 1) {
+              const parentDomain = '.' + domainParts.slice(-2).join('.');
+              document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + parentDomain;
+            }
+            
+            console.log('🗑️ Cleared cookie:', name);
+          }
         }
 
         async saveTokens(tokenData) {
