@@ -264,9 +264,7 @@
         codeVerifier: 'sidedrawer_code_verifier'
       };
 
-      // CRITICAL: Use CLIENT_ID-specific key to match SideDrawer's storage pattern
-      // This allows the widget to find existing sessions from the SideDrawer web app
-      const getSessionKey = () => `sd_session_${OAUTH_CONFIG.clientId}`;
+      const ZOHO_SESSION_KEY = 'sdSession'; // Zoho session storage key
       
       // Helper function to extract Auth0 domain from authorization endpoint
       function getAuth0Domain() {
@@ -405,24 +403,19 @@
 
         // Simple localStorage-only session management
         async setZohoSession(data) {
-          const sessionKey = getSessionKey();
-          localStorage.setItem(sessionKey, JSON.stringify(data));
-          console.log(`✓ Stored session in localStorage (key: ${sessionKey})`);
+          localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
+          console.log('✓ Stored session in localStorage');
           return true;
         }
 
         async getZohoSession() {
-          const sessionKey = getSessionKey();
-          const data = localStorage.getItem(sessionKey);
-          console.log(`🔍 Looking for session with key: ${sessionKey}`);
-          console.log(`📦 Session found: ${data ? 'YES' : 'NO'}`);
+          const data = localStorage.getItem(ZOHO_SESSION_KEY);
           return data ? JSON.parse(data) : null;
         }
 
         async clearZohoSession() {
-          const sessionKey = getSessionKey();
-          localStorage.removeItem(sessionKey);
-          console.log(`✓ Cleared session from localStorage (key: ${sessionKey})`);
+          localStorage.removeItem(ZOHO_SESSION_KEY);
+          console.log('✓ Cleared session from localStorage');
         }
 
         async init() {
@@ -604,39 +597,26 @@
         }
 
         async checkConnection() {
-          console.log('🔍 Checking connection status...');
-          
           // Try to get existing session
           const session = await this.getZohoSession();
-          console.log('Session data:', session ? {
-            hasAccessToken: !!session.accessToken,
-            expiresAt: session.expiresAt,
-            isExpired: session.expiresAt ? this.isTokenExpired(session.expiresAt) : 'N/A'
-          } : 'NULL');
           
           if (session && session.accessToken && !this.isTokenExpired(session.expiresAt)) {
             // Valid session exists
-            console.log('✅ Valid session found - showing connected status');
+            console.log('✓ Valid session found');
             this.showConnectedStatus();
+          } else if (this.getRefreshToken()) {
+            // Have refresh token, try silent refresh
+            console.log('🔄 Attempting silent refresh...');
+            document.getElementById('app-content').innerHTML = `
+              <div class="loading">
+                <div class="spinner"></div>
+                <p>Refreshing connection...</p>
+              </div>
+            `;
+            await this.refreshAccessToken();
           } else {
-            const refreshToken = this.getRefreshToken();
-            console.log('Refresh token available:', !!refreshToken);
-            
-            if (refreshToken) {
-              // Have refresh token, try silent refresh
-              console.log('🔄 Token expired or missing, attempting silent refresh...');
-              document.getElementById('app-content').innerHTML = `
-                <div class="loading">
-                  <div class="spinner"></div>
-                  <p>Refreshing connection...</p>
-                </div>
-              `;
-              await this.refreshAccessToken();
-            } else {
-              // No valid session or refresh token
-              console.log('❌ No valid session or refresh token - showing disconnected status');
-              this.showDisconnectedStatus();
-            }
+            // No valid session or refresh token
+            this.showDisconnectedStatus();
           }
         }
 
@@ -884,17 +864,13 @@
         }
 
         async refreshAccessToken() {
-          console.log('🔄 refreshAccessToken() called');
           const refreshToken = this.getRefreshToken();
           
           if (!refreshToken) {
-            console.error('❌ No refresh token available - cannot refresh');
             this.showDisconnectedStatus();
             return;
           }
 
-          console.log('✓ Refresh token found, attempting token refresh...');
-          
           try {
             const refreshRequestBody = {
               grant_type: 'refresh_token',
@@ -902,13 +878,6 @@
               refresh_token: refreshToken,
               audience: OAUTH_CONFIG.audience
             };
-            
-            console.log('Refresh request:', {
-              endpoint: OAUTH_CONFIG.tokenEndpoint,
-              clientId: OAUTH_CONFIG.clientId,
-              audience: OAUTH_CONFIG.audience,
-              hasRefreshToken: !!refreshToken
-            });
             
             const response = await fetch(OAUTH_CONFIG.tokenEndpoint, {
               method: 'POST',
@@ -918,27 +887,16 @@
               body: JSON.stringify(refreshRequestBody)
             });
 
-            console.log('Refresh response status:', response.status, response.statusText);
-
             if (!response.ok) {
-              const errorText = await response.text();
-              console.error('Token refresh failed:', errorText);
-              throw new Error(`Token refresh failed: ${response.status} ${response.statusText}`);
+              throw new Error('Token refresh failed');
             }
 
             const tokenData = await response.json();
-            console.log('✅ Token refresh successful!', {
-              hasAccessToken: !!tokenData.access_token,
-              hasRefreshToken: !!tokenData.refresh_token,
-              expiresIn: tokenData.expires_in
-            });
-            
-            await this.saveTokens(tokenData);
+            this.saveTokens(tokenData);
             this.showConnectedStatus();
 
           } catch (error) {
-            console.error('❌ Token refresh error:', error);
-            console.error('Error details:', error.stack);
+            console.error('Token refresh error:', error);
             this.disconnect();
           }
         }
@@ -1095,10 +1053,7 @@
         }
 
         getRefreshToken() {
-          const token = localStorage.getItem(STORAGE_KEYS.refreshToken);
-          console.log(`🔍 Looking for refresh token (key: ${STORAGE_KEYS.refreshToken})`);
-          console.log(`📦 Refresh token found: ${token ? 'YES (' + token.substring(0, 20) + '...)' : 'NO'}`);
-          return token;
+          return localStorage.getItem(STORAGE_KEYS.refreshToken);
         }
 
         isTokenExpired(expiresAt) {
