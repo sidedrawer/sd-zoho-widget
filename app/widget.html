@@ -280,6 +280,7 @@
       class SideDrawerAuth {
         constructor() {
           this.zohoInitialized = false;
+          this.refreshInterval = null;
           this.initZoho();
         }
 
@@ -599,14 +600,35 @@
         async checkConnection() {
           // Try to get existing session
           const session = await this.getZohoSession();
+          const refreshToken = this.getRefreshToken();
           
+          // Check if session exists and token is valid
           if (session && session.accessToken && !this.isTokenExpired(session.expiresAt)) {
             // Valid session exists
             console.log('✓ Valid session found');
             this.showConnectedStatus();
-          } else if (this.getRefreshToken()) {
-            // Have refresh token, try silent refresh
-            console.log('🔄 Attempting silent refresh...');
+          } else if (session && session.accessToken && this.isTokenExpired(session.expiresAt)) {
+            // Session exists but token is EXPIRED - try to revive it
+            console.log('🔄 Dead session detected (expired token) - attempting automatic revival...');
+            console.log('  Expires at:', session.expiresAt ? new Date(parseInt(session.expiresAt)).toISOString() : 'N/A');
+            console.log('  Current time:', new Date().toISOString());
+            console.log('  Refresh token available:', refreshToken ? 'YES' : 'NO');
+            
+            if (refreshToken) {
+              document.getElementById('app-content').innerHTML = `
+                <div class="loading">
+                  <div class="spinner"></div>
+                  <p>Reviving expired session...</p>
+                </div>
+              `;
+              await this.refreshAccessToken();
+            } else {
+              console.warn('⚠️ Expired session found but no refresh token available');
+              this.showDisconnectedStatus();
+            }
+          } else if (refreshToken) {
+            // No session but have refresh token - try silent refresh
+            console.log('🔄 No session found, but refresh token exists - attempting refresh...');
             document.getElementById('app-content').innerHTML = `
               <div class="loading">
                 <div class="spinner"></div>
@@ -616,11 +638,39 @@
             await this.refreshAccessToken();
           } else {
             // No valid session or refresh token
+            console.log('⚠️ No session or refresh token found');
             this.showDisconnectedStatus();
           }
         }
 
+        startPeriodicTokenRefresh() {
+          // Clear existing interval
+          if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+          }
+          
+          // Check and refresh token every 5 minutes
+          this.refreshInterval = setInterval(async () => {
+            console.log('🔄 Periodic token refresh check...');
+            const session = await this.getZohoSession();
+            if (session && this.isTokenExpired(session.expiresAt)) {
+              console.log('🔄 Token expired, refreshing...');
+              await this.refreshAccessToken();
+            } else if (!session && this.getRefreshToken()) {
+              console.log('🔄 No session but refresh token exists, refreshing...');
+              await this.refreshAccessToken();
+            } else {
+              console.log('✓ Token still valid');
+            }
+          }, 5 * 60 * 1000); // Every 5 minutes
+          
+          console.log('✅ Periodic token refresh started (every 5 minutes)');
+        }
+
         async showConnectedStatus() {
+          // Start periodic refresh to keep session alive
+          this.startPeriodicTokenRefresh();
+          
           const session = await this.getZohoSession();
           const expiryDate = session ? new Date(parseInt(session.expiresAt)) : new Date();
           const hasRefreshToken = !!this.getRefreshToken();
@@ -867,11 +917,17 @@
           const refreshToken = this.getRefreshToken();
           
           if (!refreshToken) {
+            console.error('❌ No refresh token available for refresh');
             this.showDisconnectedStatus();
             return;
           }
 
           try {
+            console.log('🔄 Refreshing access token...');
+            console.log('  Token endpoint:', OAUTH_CONFIG.tokenEndpoint);
+            console.log('  Client ID:', OAUTH_CONFIG.clientId);
+            console.log('  Refresh token:', refreshToken.substring(0, 20) + '...');
+            
             const refreshRequestBody = {
               grant_type: 'refresh_token',
               client_id: OAUTH_CONFIG.clientId,
@@ -888,16 +944,25 @@
             });
 
             if (!response.ok) {
-              throw new Error('Token refresh failed');
+              const errorText = await response.text();
+              console.error('❌ Token refresh failed:', response.status, errorText);
+              throw new Error(`Token refresh failed: ${response.status}`);
             }
 
             const tokenData = await response.json();
+            console.log('✅ Token refresh successful!');
+            console.log('  New access token length:', tokenData.access_token?.length || 0);
+            console.log('  Expires in:', tokenData.expires_in, 'seconds');
+            console.log('  New refresh token provided:', !!tokenData.refresh_token);
+            
             this.saveTokens(tokenData);
             this.showConnectedStatus();
 
           } catch (error) {
-            console.error('Token refresh error:', error);
-            this.disconnect();
+            console.error('❌ Token refresh error:', error);
+            console.error('Error details:', error.stack);
+            // Don't disconnect immediately - let user try again
+            this.showError(`Failed to refresh session: ${error.message}`);
           }
         }
 
@@ -969,6 +1034,13 @@
         async disconnect() {
           console.log('🔓 Disconnecting from SideDrawer...');
           
+          // Clear periodic refresh interval
+          if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+            this.refreshInterval = null;
+            console.log('✓ Periodic refresh stopped');
+          }
+          
           // Clear Zoho session
           await this.clearZohoSession();
           
@@ -1028,22 +1100,31 @@
           // Store access token in Zoho session (shared across widgets)
           const expiresAt = Date.now() + (tokenData.expires_in * 1000);
           
+          // Get existing refresh token (in case new one not provided)
+          const existingRefreshToken = this.getRefreshToken();
+          
           const sessionData = {
             accessToken: tokenData.access_token,
             expiresAt: expiresAt,
-            tokenType: tokenData.token_type || 'Bearer'
+            tokenType: tokenData.token_type || 'Bearer',
+            // Store refresh token in session object too (for consistency with @SidedrawerRelated)
+            refreshToken: tokenData.refresh_token || existingRefreshToken || null
           };
           
           console.log('💾 Saving session data...');
           console.log('  Access token length:', tokenData.access_token?.length || 0);
           console.log('  Expires at:', new Date(expiresAt).toISOString());
+          console.log('  Refresh token in session:', !!sessionData.refreshToken);
           
           await this.setZohoSession(sessionData);
           
-          // Store refresh token in localStorage (persistent)
-          if (tokenData.refresh_token) {
-            localStorage.setItem(STORAGE_KEYS.refreshToken, tokenData.refresh_token);
-            console.log('✓ Refresh token stored for silent refresh');
+          // Store refresh token in localStorage (persistent) - use new one if provided, otherwise keep old one
+          const refreshTokenToStore = tokenData.refresh_token || existingRefreshToken;
+          if (refreshTokenToStore) {
+            localStorage.setItem(STORAGE_KEYS.refreshToken, refreshTokenToStore);
+            console.log('✓ Refresh token stored in localStorage for silent refresh');
+          } else {
+            console.warn('⚠️ No refresh token to store');
           }
         }
 
