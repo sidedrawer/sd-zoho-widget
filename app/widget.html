@@ -600,7 +600,7 @@
         async checkConnection() {
           // Try to get existing session
           const session = await this.getZohoSession();
-          const refreshToken = this.getRefreshToken();
+          const refreshToken = await this.getRefreshToken();
           
           // Check if session exists and token is valid
           if (session && session.accessToken && !this.isTokenExpired(session.expiresAt)) {
@@ -613,6 +613,7 @@
             console.log('  Expires at:', session.expiresAt ? new Date(parseInt(session.expiresAt)).toISOString() : 'N/A');
             console.log('  Current time:', new Date().toISOString());
             console.log('  Refresh token available:', refreshToken ? 'YES' : 'NO');
+            console.log('  Session keys:', session ? Object.keys(session) : []);
             
             if (refreshToken) {
               document.getElementById('app-content').innerHTML = `
@@ -624,7 +625,25 @@
               await this.refreshAccessToken();
             } else {
               console.warn('⚠️ Expired session found but no refresh token available');
-              this.showDisconnectedStatus();
+              console.warn('⚠️ This session was created before refresh token storage was added');
+              console.warn('⚠️ You need to re-authenticate to get a refresh token');
+              
+              // Show helpful error message
+              document.getElementById('app-content').innerHTML = `
+                <div class="status-card error">
+                  <div class="status-indicator">
+                    <div class="status-dot error"></div>
+                    <span class="status-text">Session Expired - Re-authentication Required</span>
+                  </div>
+                  <p style="color: #6b7280; font-size: 14px; margin-top: 8px;">
+                    Your session expired and cannot be refreshed automatically because it was created before refresh token storage was implemented.
+                  </p>
+                  <p style="color: #6b7280; font-size: 14px; margin-top: 8px;">
+                    Please click "Connect to SideDrawer" below to re-authenticate. Your new session will include refresh token support.
+                  </p>
+                </div>
+                <button class="btn btn-success" onclick="auth.startOAuthFlow()" style="margin-top: 20px;">Connect to SideDrawer</button>
+              `;
             }
           } else if (refreshToken) {
             // No session but have refresh token - try silent refresh
@@ -653,10 +672,11 @@
           this.refreshInterval = setInterval(async () => {
             console.log('🔄 Periodic token refresh check...');
             const session = await this.getZohoSession();
+            const refreshToken = await this.getRefreshToken();
             if (session && this.isTokenExpired(session.expiresAt)) {
               console.log('🔄 Token expired, refreshing...');
               await this.refreshAccessToken();
-            } else if (!session && this.getRefreshToken()) {
+            } else if (!session && refreshToken) {
               console.log('🔄 No session but refresh token exists, refreshing...');
               await this.refreshAccessToken();
             } else {
@@ -673,7 +693,7 @@
           
           const session = await this.getZohoSession();
           const expiryDate = session ? new Date(parseInt(session.expiresAt)) : new Date();
-          const hasRefreshToken = !!this.getRefreshToken();
+          const hasRefreshToken = !!(await this.getRefreshToken());
           
           document.getElementById('app-content').innerHTML = `
             <div class="status-card connected">
@@ -914,10 +934,51 @@
         }
 
         async refreshAccessToken() {
-          const refreshToken = this.getRefreshToken();
+          const refreshToken = await this.getRefreshToken();
           
           if (!refreshToken) {
             console.error('❌ No refresh token available for refresh');
+            // Last resort: check session object directly
+            const session = await this.getZohoSession();
+            if (session && session.refreshToken) {
+              console.log('🔄 Found refresh token in session object, using it...');
+              // Use session.refreshToken directly
+              const tokenToUse = session.refreshToken;
+              // Continue with refresh using this token
+              try {
+                console.log('🔄 Refreshing access token...');
+                const refreshRequestBody = {
+                  grant_type: 'refresh_token',
+                  client_id: OAUTH_CONFIG.clientId,
+                  refresh_token: tokenToUse,
+                  audience: OAUTH_CONFIG.audience
+                };
+                
+                const response = await fetch(OAUTH_CONFIG.tokenEndpoint, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify(refreshRequestBody)
+                });
+
+                if (!response.ok) {
+                  const errorText = await response.text();
+                  console.error('❌ Token refresh failed:', response.status, errorText);
+                  throw new Error(`Token refresh failed: ${response.status}`);
+                }
+
+                const tokenData = await response.json();
+                console.log('✅ Token refresh successful!');
+                this.saveTokens(tokenData);
+                this.showConnectedStatus();
+                return;
+              } catch (error) {
+                console.error('❌ Token refresh error:', error);
+                this.showError(`Failed to refresh session: ${error.message}`);
+                return;
+              }
+            }
             this.showDisconnectedStatus();
             return;
           }
@@ -1100,31 +1161,55 @@
           // Store access token in Zoho session (shared across widgets)
           const expiresAt = Date.now() + (tokenData.expires_in * 1000);
           
+          // DEBUG: Log what we received from OAuth
+          console.log('💾 Saving tokens - OAuth response contains:');
+          console.log('  - access_token:', !!tokenData.access_token, tokenData.access_token ? `(${tokenData.access_token.length} chars)` : 'MISSING');
+          console.log('  - refresh_token:', !!tokenData.refresh_token, tokenData.refresh_token ? `(${tokenData.refresh_token.length} chars)` : 'MISSING');
+          console.log('  - expires_in:', tokenData.expires_in);
+          console.log('  - token_type:', tokenData.token_type);
+          console.log('  - All keys in tokenData:', Object.keys(tokenData));
+          
           // Get existing refresh token (in case new one not provided)
-          const existingRefreshToken = this.getRefreshToken();
+          // Check both session object and localStorage
+          const session = await this.getZohoSession();
+          const existingRefreshToken = session?.refreshToken || localStorage.getItem(STORAGE_KEYS.refreshToken);
+          
+          console.log('💾 Existing refresh token check:');
+          console.log('  - In session object:', !!session?.refreshToken);
+          console.log('  - In localStorage:', !!localStorage.getItem(STORAGE_KEYS.refreshToken));
+          
+          // Use new refresh token if provided, otherwise keep existing one
+          const refreshTokenToUse = tokenData.refresh_token || existingRefreshToken;
           
           const sessionData = {
             accessToken: tokenData.access_token,
             expiresAt: expiresAt,
             tokenType: tokenData.token_type || 'Bearer',
             // Store refresh token in session object too (for consistency with @SidedrawerRelated)
-            refreshToken: tokenData.refresh_token || existingRefreshToken || null
+            refreshToken: refreshTokenToUse || null
           };
           
           console.log('💾 Saving session data...');
           console.log('  Access token length:', tokenData.access_token?.length || 0);
           console.log('  Expires at:', new Date(expiresAt).toISOString());
           console.log('  Refresh token in session:', !!sessionData.refreshToken);
+          if (sessionData.refreshToken) {
+            console.log('  Refresh token preview:', sessionData.refreshToken.substring(0, 20) + '...');
+          }
           
           await this.setZohoSession(sessionData);
           
-          // Store refresh token in localStorage (persistent) - use new one if provided, otherwise keep old one
-          const refreshTokenToStore = tokenData.refresh_token || existingRefreshToken;
-          if (refreshTokenToStore) {
-            localStorage.setItem(STORAGE_KEYS.refreshToken, refreshTokenToStore);
-            console.log('✓ Refresh token stored in localStorage for silent refresh');
+          // Store refresh token in localStorage (persistent) - ALWAYS save if we have one
+          if (refreshTokenToUse) {
+            localStorage.setItem(STORAGE_KEYS.refreshToken, refreshTokenToUse);
+            console.log('✅ Refresh token stored in localStorage:', STORAGE_KEYS.refreshToken);
+            console.log('✅ Refresh token also stored in session object');
           } else {
-            console.warn('⚠️ No refresh token to store');
+            console.error('❌ CRITICAL: No refresh token available to store!');
+            console.error('  - OAuth response had refresh_token:', !!tokenData.refresh_token);
+            console.error('  - Existing refresh token found:', !!existingRefreshToken);
+            console.error('  - This means session cannot be refreshed automatically!');
+            console.error('  - User will need to re-authenticate when token expires.');
           }
         }
 
@@ -1133,8 +1218,44 @@
           return session ? session.accessToken : null;
         }
 
-        getRefreshToken() {
-          return localStorage.getItem(STORAGE_KEYS.refreshToken);
+        async getRefreshToken() {
+          // PRIORITY 1: Check session object (new format - refresh token stored in session)
+          const session = await this.getZohoSession();
+          console.log('[getRefreshToken] Checking session object:', {
+            hasSession: !!session,
+            hasRefreshToken: !!(session?.refreshToken),
+            sessionKeys: session ? Object.keys(session) : []
+          });
+          
+          if (session && session.refreshToken) {
+            console.log('✅ Refresh token found in session object');
+            return session.refreshToken;
+          }
+          
+          // PRIORITY 2: Check legacy localStorage location (for backward compatibility)
+          const legacyToken = localStorage.getItem(STORAGE_KEYS.refreshToken);
+          console.log('[getRefreshToken] Checking legacy localStorage:', {
+            key: STORAGE_KEYS.refreshToken,
+            found: !!legacyToken
+          });
+          
+          if (legacyToken) {
+            console.log('✅ Refresh token found in legacy localStorage');
+            return legacyToken;
+          }
+          
+          // PRIORITY 3: Check all localStorage keys containing "refresh" or "token"
+          console.log('[getRefreshToken] Scanning localStorage for refresh tokens...');
+          const allKeys = Object.keys(localStorage);
+          const tokenKeys = allKeys.filter(k => k.toLowerCase().includes('refresh') || k.toLowerCase().includes('token'));
+          console.log('[getRefreshToken] Found potential token keys:', tokenKeys);
+          tokenKeys.forEach(key => {
+            const value = localStorage.getItem(key);
+            console.log(`  - ${key}: ${value ? value.substring(0, 20) + '...' : 'empty'}`);
+          });
+          
+          console.log('⚠️ No refresh token found in session object or localStorage');
+          return null;
         }
 
         isTokenExpired(expiresAt) {
@@ -1181,6 +1302,79 @@
 
       // Initialize auth manager
       const auth = new SideDrawerAuth();
+      
+      // Helper function to check session status (can be called from console)
+      window.checkSideDrawerSession = async function() {
+        console.log('🔍 Checking SideDrawer Session Status...');
+        console.log('='.repeat(60));
+        
+        // Check localStorage for session
+        const sessionStr = localStorage.getItem('sdSession');
+        console.log('📦 localStorage key "sdSession":', sessionStr ? 'FOUND' : 'NOT FOUND');
+        
+        if (sessionStr) {
+          try {
+            const session = JSON.parse(sessionStr);
+            console.log('✅ Session object parsed successfully');
+            console.log('  Keys in session:', Object.keys(session));
+            console.log('  Has accessToken:', !!session.accessToken);
+            console.log('  Has refreshToken:', !!session.refreshToken);
+            console.log('  Expires at:', session.expiresAt ? new Date(parseInt(session.expiresAt)).toISOString() : 'N/A');
+            
+            if (session.expiresAt) {
+              const now = Date.now();
+              const expiresAt = parseInt(session.expiresAt);
+              const timeUntilExpiry = Math.floor((expiresAt - now) / 1000);
+              console.log('  Time until expiry:', timeUntilExpiry, 'seconds');
+              console.log('  Is expired:', timeUntilExpiry < 0 ? 'YES ❌' : 'NO ✅');
+            }
+            
+            if (session.refreshToken) {
+              console.log('  Refresh token preview:', session.refreshToken.substring(0, 20) + '...');
+            } else {
+              console.log('  ⚠️ NO REFRESH TOKEN IN SESSION OBJECT!');
+            }
+          } catch (e) {
+            console.error('❌ Failed to parse session:', e);
+          }
+        }
+        
+        // Check localStorage for separate refresh token
+        const refreshTokenKey = 'sidedrawer_refresh_token';
+        const refreshToken = localStorage.getItem(refreshTokenKey);
+        console.log('📦 localStorage key "' + refreshTokenKey + '":', refreshToken ? 'FOUND ✅' : 'NOT FOUND ❌');
+        if (refreshToken) {
+          console.log('  Refresh token preview:', refreshToken.substring(0, 20) + '...');
+        }
+        
+        // Check sessionStorage
+        const sessionStorageStr = sessionStorage.getItem('sdSession');
+        console.log('📦 sessionStorage key "sdSession":', sessionStorageStr ? 'FOUND' : 'NOT FOUND');
+        
+        console.log('='.repeat(60));
+        
+        if (!sessionStr || !refreshToken) {
+          console.log('⚠️ NO REFRESH TOKEN FOUND!');
+          console.log('');
+          console.log('📋 This means:');
+          console.log('  1. Your session was created BEFORE refresh token storage was added');
+          console.log('  2. OR the OAuth response did not include refresh_token');
+          console.log('  3. Session cannot be automatically refreshed');
+          console.log('');
+          console.log('✅ SOLUTION: Re-authenticate to get a fresh session with refresh token');
+          console.log('  - Click "Connect to SideDrawer" button in the widget');
+          console.log('  - OR run: auth.startOAuthFlow()');
+          console.log('');
+          console.log('✅ After re-authentication, refresh token will be stored in:');
+          console.log('  - Session object: sdSession.refreshToken');
+          console.log('  - localStorage: sidedrawer_refresh_token');
+        } else {
+          console.log('✅ Refresh token found! Session can be automatically refreshed.');
+          console.log('💡 Run: auth.checkConnection() to test refresh');
+        }
+      };
+      
+      console.log('💡 Run checkSideDrawerSession() in console to check session status');
     </script>
   </body>
 </html>
