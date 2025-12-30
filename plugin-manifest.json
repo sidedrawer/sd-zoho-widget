@@ -4,7 +4,21 @@
     "connect-src": [
       "https://auth-sbx.sidedrawersbx.com",
       "https://user-api-sbx.sidedrawersbx.com",
-      "https://tenants-gateway-api-sbx.sidedrawersbx.com"
+      "https://tenants-gateway-api-sbx.sidedrawersbx.com",
+      "https://api-sbx.sidedrawersbx.com",
+      "https://subscription-api-sbx.sidedrawersbx.com",
+      "https://api.stripe.com",
+      "https://auth.sidedrawer.com",
+      "https://user-api.sidedrawer.com",
+      "https://tenants-gateway-api.sidedrawer.com",
+      "https://api.sidedrawer.com",
+      "https://subscription-api.sidedrawer.com"
+    ],
+    "script-src": [
+      "https://js.stripe.com"
+    ],
+    "frame-src": [
+      "https://js.stripe.com"
     ]
   },
   "variables": [
