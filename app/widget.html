@@ -285,14 +285,122 @@
         }
 
         async initZoho() {
+          // Helper function to extract client_id from sd_config_redirect_uri sessionStorage
+          const extractClientIdFromRedirectUri = () => {
+            const redirectUri = sessionStorage.getItem('sd_config_redirect_uri');
+            if (redirectUri) {
+              try {
+                const url = new URL(redirectUri);
+                const clientId = url.searchParams.get('client_id');
+                if (clientId) {
+                  console.log('[SideDrawer Widget] ✓ Extracted client_id from redirect_uri:', clientId);
+                  return clientId;
+                }
+              } catch (e) {
+                console.warn('[SideDrawer Widget] Failed to parse redirect_uri:', e);
+              }
+            }
+            return null;
+          };
+          
+          // Helper function to get client_id from multiple sources
+          const getClientId = () => {
+            // Priority 1: URL params
+            const urlClientId = urlParams.get('client_id');
+            if (urlClientId) {
+              return urlClientId;
+            }
+            
+            // Priority 2: Extract from sd_config_redirect_uri
+            const redirectUriClientId = extractClientIdFromRedirectUri();
+            if (redirectUriClientId) {
+              return redirectUriClientId;
+            }
+            
+            // Priority 3: From OAUTH_CONFIG (which may have been set from sessionStorage)
+            if (OAUTH_CONFIG.clientId) {
+              return OAUTH_CONFIG.clientId;
+            }
+            
+            return null;
+          };
+          
           // When loaded in Zoho, respond to postMessage requests for session data
-          window.addEventListener('message', (event) => {
+          window.addEventListener('message', async (event) => {
+            // Handle REFRESH_SIDEDRAWER_TOKEN message
+            if (event.data && event.data.type === 'REFRESH_SIDEDRAWER_TOKEN') {
+              console.log('[SideDrawer Widget] 🔄 Received token refresh request');
+              
+              try {
+                // Get client_id from multiple sources
+                const clientId = getClientId();
+                
+                if (!clientId) {
+                  throw new Error('client_id not found in URL params, redirect_uri, or sessionStorage');
+                }
+                
+                // Update OAUTH_CONFIG.clientId if needed
+                if (!OAUTH_CONFIG.clientId) {
+                  OAUTH_CONFIG.clientId = clientId;
+                  console.log('[SideDrawer Widget] ✓ Set OAUTH_CONFIG.clientId from getClientId():', clientId);
+                }
+                
+                console.log('[SideDrawer Widget] Client ID for refresh:', clientId);
+                
+                // Call the existing refreshAccessToken method
+                await this.refreshAccessToken();
+                
+                // Get the refreshed session
+                const refreshedSession = await this.getZohoSession();
+                
+                if (refreshedSession && refreshedSession.accessToken) {
+                  // Ensure clientId is in session
+                  if (!refreshedSession.clientId) {
+                    refreshedSession.clientId = clientId;
+                  }
+                  
+                  console.log('[SideDrawer Widget] ✅ Token refreshed successfully');
+                  console.log('[SideDrawer Widget] New token expires at:', refreshedSession.expiresAt ? new Date(parseInt(refreshedSession.expiresAt)).toISOString() : 'N/A');
+                  
+                  // Send refreshed session back to parent
+                  window.parent.postMessage({
+                    type: 'SIDEDRAWER_SESSION_RESPONSE',
+                    session: refreshedSession
+                  }, '*');
+                } else {
+                  throw new Error('Failed to get refreshed session after token refresh');
+                }
+                
+              } catch (error) {
+                console.error('[SideDrawer Widget] ❌ Token refresh error:', error);
+                window.parent.postMessage({
+                  type: 'SIDEDRAWER_SESSION_RESPONSE',
+                  session: null,
+                  error: error.message
+                }, '*');
+              }
+              
+              return; // Exit early, don't process REQUEST_SIDEDRAWER_SESSION
+            }
+            
+            // Handle REQUEST_SIDEDRAWER_SESSION message
             if (event.data && event.data.type === 'REQUEST_SIDEDRAWER_SESSION') {
               console.log('📥 Received session request from parent window');
               const session = localStorage.getItem('sdSession');
               if (session) {
                 try {
                   const sessionData = JSON.parse(session);
+                  
+                  // Ensure clientId is in session (extract from multiple sources if missing)
+                  if (!sessionData.clientId) {
+                    const clientId = getClientId();
+                    if (clientId) {
+                      sessionData.clientId = clientId;
+                      // Update stored session with clientId
+                      localStorage.setItem('sdSession', JSON.stringify(sessionData));
+                    }
+                  }
+                  
                   window.parent.postMessage({
                     type: 'SIDEDRAWER_SESSION_RESPONSE',
                     session: sessionData
@@ -303,6 +411,11 @@
                 }
               } else {
                 console.log('⚠ No session available to send');
+                // Send null session response
+                window.parent.postMessage({
+                  type: 'SIDEDRAWER_SESSION_RESPONSE',
+                  session: null
+                }, '*');
               }
             }
           });
