@@ -1067,7 +1067,6 @@ class TenantCreationWizard {
         // Add new listener
         newButton.addEventListener('click', (e) => {
           e.preventDefault();
-          console.log('🔵 Button clicked directly, calling nextStep()');
           if (window.tenantWizard) {
             window.tenantWizard.nextStep();
           } else {
@@ -1167,7 +1166,6 @@ class TenantCreationWizard {
   }
 
   async nextStep() {
-    console.log('🔵 nextStep() called, currentStep:', this.state.currentStep);
     const dict = this.state.dictionary || {};
     
     if (this.state.currentStep === 0) {
@@ -1217,7 +1215,6 @@ class TenantCreationWizard {
         }
         
         // Create payment method token
-        console.log('🔵 Creating payment method token on step 2...');
         const { paymentMethodId: pmId, error } = await stripeService.createPaymentMethod({
           name: cardholderName,
           address: {
@@ -1237,7 +1234,6 @@ class TenantCreationWizard {
         
         // Store payment method token in state
         this.state.paymentMethodToken = pmId;
-        console.log('🔵 Payment method token stored:', pmId);
       }
       
       this.state.currentStep = 3;
@@ -1245,7 +1241,6 @@ class TenantCreationWizard {
       this.attachListeners();
     } else if (this.state.currentStep === 3) {
       // Final step: create tenant
-      console.log('🔵 Step 3: Calling createTenant()');
       try {
         await this.createTenant();
       } catch (error) {
@@ -1584,14 +1579,6 @@ class TenantCreationWizard {
   }
 
   async createTenant() {
-    console.log('🔵 createTenant() called');
-    console.log('🔵 State:', {
-      selectedPaymentMethod: this.state.selectedPaymentMethod,
-      stripePublicKey: this.state.stripePublicKey ? 'Set' : 'Not set',
-      selectedPrice: this.state.selectedPrice?.id,
-      totalAdminUsers: this.state.totalAdminUsers
-    });
-    
     const dict = this.state.dictionary || {};
     
     // Validate payment method
@@ -1608,27 +1595,20 @@ class TenantCreationWizard {
     // If no payment method selected but Stripe is available, try to create one from card element
     // Note: On step 3, the card element container might not exist, so we use the stored token
     if (!paymentMethodId && this.state.stripePublicKey) {
-      console.log('🔵 No payment method selected, trying to create from Stripe Elements');
-      
       // Check if Stripe is initialized and card element exists
       if (!stripeService.stripe) {
-        console.log('🔵 Stripe not initialized, initializing...');
         try {
           await stripeService.initialize(this.state.stripePublicKey);
-          console.log('🔵 Stripe initialized successfully');
         } catch (error) {
           console.error('❌ Failed to initialize Stripe:', error);
           this.state.validationError = 'Failed to initialize payment system. Please refresh the page.';
           this.render();
           return;
         }
-      } else {
-        console.log('🔵 Stripe already initialized');
       }
 
       // Check if card element exists, if not try to create it
       if (!stripeService.cardElement) {
-        console.log('🔵 Card element not found, trying to create it...');
         const cardElementContainer = document.getElementById('card-element');
         if (!cardElementContainer) {
           console.error('❌ card-element container not found in DOM');
@@ -1638,26 +1618,21 @@ class TenantCreationWizard {
         }
         try {
           await stripeService.createCardElement('card-element');
-          console.log('🔵 Card element created successfully');
         } catch (error) {
           console.error('❌ Failed to create card element:', error);
           this.state.validationError = 'Payment form not ready. Please complete the payment form.';
           this.render();
           return;
         }
-      } else {
-        console.log('🔵 Card element already exists');
       }
 
       const cardholderName = document.getElementById('cardholder-name-input')?.value;
-      console.log('🔵 Cardholder name:', cardholderName ? 'Found' : 'Missing');
       if (!cardholderName) {
         this.state.validationError = dict.paymentdetails_addnewcardname || 'Cardholder name is required';
         this.render();
         return;
       }
 
-      console.log('🔵 Billing address:', this.state.billingAddress ? 'Found' : 'Missing');
       if (!this.state.billingAddress) {
         this.state.validationError = dict.paymentdetails_addnewcardbillingaddress || 'Billing address is required';
         this.render();
@@ -1665,7 +1640,6 @@ class TenantCreationWizard {
       }
 
       // Create payment method token
-      console.log('🔵 Creating payment method token...');
       const { paymentMethodId: pmId, error } = await stripeService.createPaymentMethod({
         name: cardholderName,
         address: {
@@ -1709,7 +1683,6 @@ class TenantCreationWizard {
   }
 
   async signupAndCreateTenant(paymentMethodId) {
-    console.log('🔵 signupAndCreateTenant() called with paymentMethodId:', paymentMethodId);
     try {
       // Collect signup data from state
       const signupData = {
@@ -1744,41 +1717,21 @@ class TenantCreationWizard {
         paymentMethodId: signupData.paymentMethodId
       };
 
-      // TODO: Add CAPTCHA token when backend is ready
-      // const captchaToken = await this.getCaptchaToken();
-      // requestBody.captchaToken = captchaToken;
-
-      // TODO: Add request signing when backend is ready
-      // const signature = this.signRequest(requestBody);
-      // headers['X-Request-Signature'] = signature.signature;
-      // headers['X-Request-Timestamp'] = signature.timestamp.toString();
-      // headers['X-API-Key'] = signature.apiKey;
-
       // Call secure backend signup endpoint
       const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
       const backendUrl = isSandbox
         ? 'https://api-sbx.sidedrawersbx.com/api/v1/auth/signup-and-login'
         : 'https://api.sidedrawer.com/api/v1/auth/signup-and-login';
 
-      console.log('🔵 Making POST request to:', backendUrl);
       // Sanitize request body for logging (mask sensitive fields)
       const sanitizedBody = { ...requestBody };
       if (sanitizedBody.password) {
         sanitizedBody.password = '***REDACTED***';
       }
-      console.log('🔵 Request body:', JSON.stringify(sanitizedBody, null, 2));
 
       const headers = {
         'Content-Type': 'application/json'
       };
-
-      // TODO: Add CAPTCHA header when backend is ready
-      // headers['X-Captcha-Token'] = captchaToken;
-
-      // TODO: Add request signing headers when backend is ready
-      // headers['X-Request-Signature'] = signature.signature;
-      // headers['X-Request-Timestamp'] = signature.timestamp.toString();
-      // headers['X-API-Key'] = signature.apiKey;
 
       const response = await fetch(backendUrl, {
         method: 'POST',

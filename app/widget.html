@@ -803,10 +803,6 @@
             const state = JSON.stringify(stateObj);
             const encodedState = btoa(state);
             
-            console.log('✓ State object:', { random: stateObj.random, verifier: stateObj.verifier.substring(0, 10) + '...' });
-            console.log('✓ State JSON length:', state.length);
-            console.log('✓ Encoded state length:', encodedState.length);
-            
             const authUrl = new URL(OAUTH_CONFIG.authorizationEndpoint);
             authUrl.searchParams.append('response_type', 'code');
             authUrl.searchParams.append('client_id', OAUTH_CONFIG.clientId);
@@ -817,18 +813,10 @@
             authUrl.searchParams.append('code_challenge_method', 'S256');
             authUrl.searchParams.append('state', encodedState);
 
-            console.log('Starting OAuth flow...');
-            console.log('Authorization URL:', authUrl.toString().substring(0, 100) + '...');
-            console.log('Redirect URI:', OAUTH_CONFIG.redirectUri);
-            console.log('Client ID:', OAUTH_CONFIG.clientId);
-
             // Check if we're running inside an iframe (Zoho)
             const isInIframe = window.self !== window.top;
-            console.log('Is in iframe:', isInIframe);
 
             if (isInIframe) {
-              console.log('Detected iframe environment - opening popup window');
-              
               // Open popup window for OAuth (works in Zoho iframe)
               const width = 600;
               const height = 700;
@@ -836,8 +824,6 @@
               const top = (screen.height - height) / 2;
               
               const popupUrl = authUrl.toString();
-              console.log('🚀 Opening popup to:', popupUrl.substring(0, 150) + '...');
-              console.log('🔑 State parameter in URL:', authUrl.searchParams.get('state')?.substring(0, 50) + '...');
               
               const popup = window.open(
                 popupUrl,
@@ -1316,271 +1302,7 @@
         }
       }
 
-      // Tenant Creation Wizard code has been extracted to tenant-wizard.js
-      // StripeService, TenantCreationWizard, and tenantWizard are now loaded from external file
-      // The code below is kept for backward compatibility and helper functions only
-      
-      // Note: stripeService and tenantWizard are now defined in tenant-wizard.js
-      
-      /**
-       * PCI-COMPLIANT PAYMENT METHOD CREATION HELPER
-       * 
-       * This helper function demonstrates how to add a payment method using Stripe Elements.
-       * Card data never touches your servers - only the paymentMethodId token is sent.
-       * 
-       * Note: stripeService is now defined in tenant-wizard.js
-       * 
-       * @param {string} stripePublicKey - Stripe public key (pk_test_... or pk_live_...)
-       * @param {string} customerId - Customer ID from your backend
-       * @param {object} billingDetails - Billing address details
-       * @param {string} accessToken - OAuth access token for API calls
-       * @param {boolean} setAsDefault - Whether to set as default payment method
-       * @returns {Promise<object>} - { success: boolean, paymentMethod?: object, error?: string }
-       */
-      async function addPaymentMethodSecurely(stripePublicKey, customerId, billingDetails, accessToken, setAsDefault = true) {
-        try {
-          // Step 1: Initialize Stripe
-          const initialized = await stripeService.initialize(stripePublicKey);
-          if (!initialized) {
-            return { success: false, error: 'Failed to initialize Stripe' };
-          }
-
-          // Step 2: Create card element (assumes HTML container exists)
-          const cardElement = await stripeService.createCardElement('card-element');
-          if (!cardElement) {
-            return { success: false, error: 'Failed to create Stripe card element. Make sure #card-element container exists.' };
-          }
-
-          // Step 3: Create payment method token (PCI-compliant)
-          const { paymentMethodId, error: stripeError } = await stripeService.createPaymentMethod(billingDetails);
-          if (stripeError || !paymentMethodId) {
-            return { success: false, error: stripeError?.message || 'Failed to create payment method' };
-          }
-
-          // Step 4: Send ONLY paymentMethodId to backend (NO card data)
-          const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-          const subscriptionApi = isSandbox
-            ? 'https://subscription-api-sbx.sidedrawersbx.com'
-            : 'https://subscription-api.sidedrawer.com';
-
-          const response = await fetch(
-            `${subscriptionApi}/customers/customer-id/${customerId}/payment-methods`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                paymentMethodId: paymentMethodId, // PCI-compliant: Only token, no card data
-                setAsDefault: setAsDefault,
-                name: billingDetails.name,
-                billingAddress: {
-                  line1: billingDetails.address.line1,
-                  city: billingDetails.address.city,
-                  state: billingDetails.address.state,
-                  postalCode: billingDetails.address.postal_code,
-                  country: billingDetails.address.country
-                }
-              })
-            }
-          );
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-            return { success: false, error: errorData.error_description || errorData.error || 'Failed to add payment method' };
-          }
-
-          const paymentMethod = await response.json();
-          console.log('✅ Payment method added successfully:', paymentMethod.id);
-
-          // Clean up Stripe Elements
-          stripeService.unmountCardElement();
-
-          return { success: true, paymentMethod };
-        } catch (error) {
-          console.error('❌ Error adding payment method:', error);
-          return { success: false, error: error.message || 'Unknown error occurred' };
-        }
-      }
-
-      /**
-       * USAGE EXAMPLE:
-       * 
-       * 1. Add HTML for Stripe Elements:
-       *    <div id="card-element-container" class="stripe-card-element-container">
-       *      <div id="card-element"></div>
-       *      <div id="card-element-error" class="stripe-error"></div>
-       *    </div>
-       * 
-       * 2. Get Stripe public key from backend/config (or environment variable)
-       *    const stripePublicKey = 'pk_test_...'; // Get from your backend API
-       * 
-       * 3. Call the helper function:
-       *    const result = await addPaymentMethodSecurely(
-       *      stripePublicKey,
-       *      customerId,
-       *      {
-       *        name: 'John Doe',
-       *        address: {
-       *          line1: '123 Main St',
-       *          city: 'Toronto',
-       *          state: 'ON',
-       *          postal_code: 'M5H 2N2',
-       *          country: 'CA'
-       *        }
-       *      },
-       *      accessToken,
-       *      true // setAsDefault
-       *    );
-       * 
-       *    if (result.success) {
-       *      console.log('Payment method added:', result.paymentMethod);
-       *    } else {
-       *      console.error('Error:', result.error);
-       *    }
-       * 
-       * IMPORTANT SECURITY NOTES:
-       * - Card data (number, CVC, expiry) NEVER touches your servers
-       * - Only paymentMethodId (token) is sent to backend
-       * - Backend must accept paymentMethodId and use Stripe SDK to attach it
-       * - This ensures PCI-DSS compliance (Requirement 3.4, 4.1, 3.2)
-       */
-
-      // Initialize auth manager (tenantWizard is already created in tenant-wizard.js)
-
-      /**
-       * PCI-COMPLIANT PAYMENT METHOD CREATION HELPER
-       * 
-       * This helper function demonstrates how to add a payment method using Stripe Elements.
-       * Card data never touches your servers - only the paymentMethodId token is sent.
-       * 
-       * Note: stripeService is now defined in tenant-wizard.js
-       * 
-       * @param {string} stripePublicKey - Stripe public key (pk_test_... or pk_live_...)
-       * @param {string} customerId - Customer ID from your backend
-       * @param {object} billingDetails - Billing address details
-       * @param {string} accessToken - OAuth access token for API calls
-       * @param {boolean} setAsDefault - Whether to set as default payment method
-       * @returns {Promise<object>} - { success: boolean, paymentMethod?: object, error?: string }
-       */
-      async function addPaymentMethodSecurely(stripePublicKey, customerId, billingDetails, accessToken, setAsDefault = true) {
-        try {
-          // Step 1: Initialize Stripe
-          const initialized = await stripeService.initialize(stripePublicKey);
-          if (!initialized) {
-            return { success: false, error: 'Failed to initialize Stripe' };
-          }
-
-          // Step 2: Create card element (assumes HTML container exists)
-          const cardElement = await stripeService.createCardElement('card-element');
-          if (!cardElement) {
-            return { success: false, error: 'Failed to create Stripe card element. Make sure #card-element container exists.' };
-          }
-
-          // Step 3: Create payment method token (PCI-compliant)
-          const { paymentMethodId, error: stripeError } = await stripeService.createPaymentMethod(billingDetails);
-          if (stripeError || !paymentMethodId) {
-            return { success: false, error: stripeError?.message || 'Failed to create payment method' };
-          }
-
-          // Step 4: Send ONLY paymentMethodId to backend (NO card data)
-          const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-          const subscriptionApi = isSandbox
-            ? 'https://subscription-api-sbx.sidedrawersbx.com'
-            : 'https://subscription-api.sidedrawer.com';
-
-          const response = await fetch(
-            `${subscriptionApi}/customers/customer-id/${customerId}/payment-methods`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                paymentMethodId: paymentMethodId, // PCI-compliant: Only token, no card data
-                setAsDefault: setAsDefault,
-                name: billingDetails.name,
-                billingAddress: {
-                  line1: billingDetails.address.line1,
-                  city: billingDetails.address.city,
-                  state: billingDetails.address.state,
-                  postalCode: billingDetails.address.postal_code,
-                  country: billingDetails.address.country
-                }
-              })
-            }
-          );
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-            return { success: false, error: errorData.error_description || errorData.error || 'Failed to add payment method' };
-          }
-
-          const paymentMethod = await response.json();
-          console.log('✅ Payment method added successfully:', paymentMethod.id);
-
-          // Clean up Stripe Elements
-          stripeService.unmountCardElement();
-
-          return { success: true, paymentMethod };
-        } catch (error) {
-          console.error('❌ Error adding payment method:', error);
-          return { success: false, error: error.message || 'Unknown error occurred' };
-        }
-      }
-
-      /**
-       * USAGE EXAMPLE:
-       * 
-       * 1. Add HTML for Stripe Elements:
-       *    <div id="card-element-container" class="stripe-card-element-container">
-       *      <div id="card-element"></div>
-       *      <div id="card-element-error" class="stripe-error"></div>
-       *    </div>
-       * 
-       * 2. Get Stripe public key from backend/config (or environment variable)
-       *    const stripePublicKey = 'pk_test_...'; // Get from your backend API
-       * 
-       * 3. Call the helper function:
-       *    const result = await addPaymentMethodSecurely(
-       *      stripePublicKey,
-       *      customerId,
-       *      {
-       *        name: 'John Doe',
-       *        address: {
-       *          line1: '123 Main St',
-       *          city: 'Toronto',
-       *          state: 'ON',
-       *          postal_code: 'M5H 2N2',
-       *          country: 'CA'
-       *        }
-       *      },
-       *      accessToken,
-       *      true // setAsDefault
-       *    );
-       * 
-       *    if (result.success) {
-       *      console.log('Payment method added:', result.paymentMethod);
-       *    } else {
-       *      console.error('Error:', result.error);
-       *    }
-       * 
-       * IMPORTANT SECURITY NOTES:
-       * - Card data (number, CVC, expiry) NEVER touches your servers
-       * - Only paymentMethodId (token) is sent to backend
-       * - Backend must accept paymentMethodId and use Stripe SDK to attach it
-       * - This ensures PCI-DSS compliance (Requirement 3.4, 4.1, 3.2)
-       */
-
-      // Note: StripeService and TenantCreationWizard classes are now in tenant-wizard.js
-      // The addPaymentMethodSecurely helper function above demonstrates usage
-
-      // Initialize auth manager (SideDrawerAuth class is defined above, starting at line 88)
-      // Note: StripeService and TenantCreationWizard classes are now in tenant-wizard.js
-
-      // Initialize auth manager (tenantWizard is already created in tenant-wizard.js)
+      // Tenant Creation Wizard, StripeService, and TenantCreationWizard classes are in tenant-wizard.js
       const auth = new SideDrawerAuth();
       
       // Helper function to check session status (can be called from console)
