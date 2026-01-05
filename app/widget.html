@@ -1064,7 +1064,8 @@
                   grant_type: 'refresh_token',
                   client_id: OAUTH_CONFIG.clientId,
                   refresh_token: tokenToUse,
-                  audience: OAUTH_CONFIG.audience
+                  audience: OAUTH_CONFIG.audience,
+                  scope: OAUTH_CONFIG.scope  // CRITICAL: Include scope to get new refresh token with rotation enabled
                 };
                 
                 const response = await fetch(OAUTH_CONFIG.tokenEndpoint, {
@@ -1079,19 +1080,19 @@
                   const errorText = await response.text();
                   console.error('❌ Token refresh failed:', response.status, errorText);
                   
-                  // Log the actual request being made for debugging
-                  console.log('🔍 Debugging refresh request:');
-                  console.log('   Endpoint:', OAUTH_CONFIG.tokenEndpoint);
-                  console.log('   Client ID:', OAUTH_CONFIG.clientId);
-                  console.log('   Refresh token (full):', tokenToUse);
-                  console.log('   Audience:', OAUTH_CONFIG.audience);
-                  console.log('   Request body:', JSON.stringify(refreshRequestBody, null, 2));
-                  
+                    
                   throw new Error(`Token refresh failed: ${response.status}`);
                 }
 
                 const tokenData = await response.json();
                 console.log('✅ Token refresh successful!');
+                console.log('  New access token length:', tokenData.access_token?.length || 0);
+                console.log('  Expires in:', tokenData.expires_in, 'seconds');
+                console.log('  New refresh token provided:', !!tokenData.refresh_token);
+                if (tokenData.refresh_token) {
+                  console.log('  🔄 ROTATION: New refresh token received, old token is now invalid');
+                  console.log('  New refresh token preview:', tokenData.refresh_token.substring(0, 20) + '...');
+                }
                 this.saveTokens(tokenData);
                 this.showConnectedStatus();
                 return;
@@ -1115,7 +1116,8 @@
               grant_type: 'refresh_token',
               client_id: OAUTH_CONFIG.clientId,
               refresh_token: refreshToken,
-              audience: OAUTH_CONFIG.audience
+              audience: OAUTH_CONFIG.audience,
+              scope: OAUTH_CONFIG.scope  // CRITICAL: Include scope to get new refresh token with rotation enabled
             };
             
             const response = await fetch(OAUTH_CONFIG.tokenEndpoint, {
@@ -1146,6 +1148,12 @@
             console.log('  New access token length:', tokenData.access_token?.length || 0);
             console.log('  Expires in:', tokenData.expires_in, 'seconds');
             console.log('  New refresh token provided:', !!tokenData.refresh_token);
+            if (tokenData.refresh_token) {
+              console.log('  🔄 ROTATION: New refresh token received, old token is now invalid');
+              console.log('  New refresh token preview:', tokenData.refresh_token.substring(0, 20) + '...');
+            } else {
+              console.warn('  ⚠️ WARNING: No new refresh token in response - rotation may not be working!');
+            }
             
             this.saveTokens(tokenData);
             this.showConnectedStatus();
