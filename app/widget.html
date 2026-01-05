@@ -1078,6 +1078,15 @@
                 if (!response.ok) {
                   const errorText = await response.text();
                   console.error('❌ Token refresh failed:', response.status, errorText);
+                  
+                  // Log the actual request being made for debugging
+                  console.log('🔍 Debugging refresh request:');
+                  console.log('   Endpoint:', OAUTH_CONFIG.tokenEndpoint);
+                  console.log('   Client ID:', OAUTH_CONFIG.clientId);
+                  console.log('   Refresh token (full):', tokenToUse);
+                  console.log('   Audience:', OAUTH_CONFIG.audience);
+                  console.log('   Request body:', JSON.stringify(refreshRequestBody, null, 2));
+                  
                   throw new Error(`Token refresh failed: ${response.status}`);
                 }
 
@@ -1120,6 +1129,15 @@
             if (!response.ok) {
               const errorText = await response.text();
               console.error('❌ Token refresh failed:', response.status, errorText);
+              
+              // Log the actual request being made for debugging
+              console.log('🔍 Debugging refresh request:');
+              console.log('   Endpoint:', OAUTH_CONFIG.tokenEndpoint);
+              console.log('   Client ID:', OAUTH_CONFIG.clientId);
+              console.log('   Refresh token (full):', refreshToken);
+              console.log('   Audience:', OAUTH_CONFIG.audience);
+              console.log('   Request body:', JSON.stringify(refreshRequestBody, null, 2));
+              
               throw new Error(`Token refresh failed: ${response.status}`);
             }
 
