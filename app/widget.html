@@ -859,7 +859,13 @@
           `;
         }
 
-        showError(message) {
+        showError(message, showDisconnect = false) {
+          const disconnectButton = showDisconnect ? `
+            <button class="btn" onclick="auth.disconnect()" style="background: #dc3545; margin-left: 10px;">
+              Disconnect & Re-authenticate
+            </button>
+          ` : '';
+          
           document.getElementById('app-content').innerHTML = `
             <div class="status-card error">
               <div class="status-indicator">
@@ -872,6 +878,7 @@
             </div>
 
             <button class="btn" onclick="auth.checkConnection()">Try Again</button>
+            ${disconnectButton}
           `;
         }
 
@@ -1098,7 +1105,7 @@
                 return;
               } catch (error) {
                 console.error('❌ Token refresh error:', error);
-                this.showError(`Failed to refresh session: ${error.message}`);
+                this.showError(`Failed to refresh session: ${error.message}`, true);
                 return;
               }
             }
@@ -1161,8 +1168,8 @@
           } catch (error) {
             console.error('❌ Token refresh error:', error);
             console.error('Error details:', error.stack);
-            // Don't disconnect immediately - let user try again
-            this.showError(`Failed to refresh session: ${error.message}`);
+            // Show disconnect option since refresh token is likely invalid
+            this.showError(`Failed to refresh session: ${error.message}`, true);
           }
         }
 
