@@ -687,7 +687,13 @@
           `;
         }
 
-        showError(message) {
+        showError(message, showDisconnect = false) {
+          const disconnectButton = showDisconnect ? `
+            <button class="btn" onclick="auth.disconnect()" style="background: #dc3545; margin-left: 10px;">
+              Disconnect & Re-authenticate
+            </button>
+          ` : '';
+          
           document.getElementById('app-content').innerHTML = `
             <div class="status-card error">
               <div class="status-indicator">
@@ -700,6 +706,7 @@
             </div>
 
             <button class="btn" onclick="auth.checkConnection()">Try Again</button>
+            ${disconnectButton}
           `;
         }
 
@@ -953,7 +960,8 @@
                   grant_type: 'refresh_token',
                   client_id: OAUTH_CONFIG.clientId,
                   refresh_token: tokenToUse,
-                  audience: OAUTH_CONFIG.audience
+                  audience: OAUTH_CONFIG.audience,
+                  scope: OAUTH_CONFIG.scope  // CRITICAL: Include scope to get new refresh token with rotation enabled
                 };
                 
                 const response = await fetch(OAUTH_CONFIG.tokenEndpoint, {
@@ -967,17 +975,26 @@
                 if (!response.ok) {
                   const errorText = await response.text();
                   console.error('❌ Token refresh failed:', response.status, errorText);
+                  
+                    
                   throw new Error(`Token refresh failed: ${response.status}`);
                 }
 
                 const tokenData = await response.json();
                 console.log('✅ Token refresh successful!');
+                console.log('  New access token length:', tokenData.access_token?.length || 0);
+                console.log('  Expires in:', tokenData.expires_in, 'seconds');
+                console.log('  New refresh token provided:', !!tokenData.refresh_token);
+                if (tokenData.refresh_token) {
+                  console.log('  🔄 ROTATION: New refresh token received, old token is now invalid');
+                  console.log('  New refresh token preview:', tokenData.refresh_token.substring(0, 20) + '...');
+                }
                 this.saveTokens(tokenData);
                 this.showConnectedStatus();
                 return;
               } catch (error) {
                 console.error('❌ Token refresh error:', error);
-                this.showError(`Failed to refresh session: ${error.message}`);
+                this.showError(`Failed to refresh session: ${error.message}`, true);
                 return;
               }
             }
@@ -995,7 +1012,8 @@
               grant_type: 'refresh_token',
               client_id: OAUTH_CONFIG.clientId,
               refresh_token: refreshToken,
-              audience: OAUTH_CONFIG.audience
+              audience: OAUTH_CONFIG.audience,
+              scope: OAUTH_CONFIG.scope  // CRITICAL: Include scope to get new refresh token with rotation enabled
             };
             
             const response = await fetch(OAUTH_CONFIG.tokenEndpoint, {
@@ -1009,6 +1027,15 @@
             if (!response.ok) {
               const errorText = await response.text();
               console.error('❌ Token refresh failed:', response.status, errorText);
+              
+              // Log the actual request being made for debugging
+              console.log('🔍 Debugging refresh request:');
+              console.log('   Endpoint:', OAUTH_CONFIG.tokenEndpoint);
+              console.log('   Client ID:', OAUTH_CONFIG.clientId);
+              console.log('   Refresh token (full):', refreshToken);
+              console.log('   Audience:', OAUTH_CONFIG.audience);
+              console.log('   Request body:', JSON.stringify(refreshRequestBody, null, 2));
+              
               throw new Error(`Token refresh failed: ${response.status}`);
             }
 
@@ -1017,6 +1044,12 @@
             console.log('  New access token length:', tokenData.access_token?.length || 0);
             console.log('  Expires in:', tokenData.expires_in, 'seconds');
             console.log('  New refresh token provided:', !!tokenData.refresh_token);
+            if (tokenData.refresh_token) {
+              console.log('  🔄 ROTATION: New refresh token received, old token is now invalid');
+              console.log('  New refresh token preview:', tokenData.refresh_token.substring(0, 20) + '...');
+            } else {
+              console.warn('  ⚠️ WARNING: No new refresh token in response - rotation may not be working!');
+            }
             
             this.saveTokens(tokenData);
             this.showConnectedStatus();
@@ -1024,8 +1057,8 @@
           } catch (error) {
             console.error('❌ Token refresh error:', error);
             console.error('Error details:', error.stack);
-            // Don't disconnect immediately - let user try again
-            this.showError(`Failed to refresh session: ${error.message}`);
+            // Show disconnect option since refresh token is likely invalid
+            this.showError(`Failed to refresh session: ${error.message}`, true);
           }
         }
 
