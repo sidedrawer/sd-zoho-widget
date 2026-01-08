@@ -10,8 +10,10 @@
     <script src="https://js.stripe.com/v3/"></script>
     <!-- External CSS -->
     <link rel="stylesheet" href="widget.css">
-    <!-- Tenant Creation Wizard -->
+    <!-- Tenant Creation Wizard (non-logged-in) -->
     <script src="tenant-wizard.js"></script>
+    <!-- Tenant Creation Wizard (logged-in) -->
+    <script src="tenant-wizard-with-credentials.js"></script>
   </head>
   <body>
     <div class="container">
@@ -516,11 +518,6 @@
 
           // Check existing token
           const hasSession = await this.checkConnection();
-          
-          // If no session and no OAuth config, show tenant creation flow
-          if (!hasSession && !OAUTH_CONFIG.clientId) {
-            await this.showTenantCreationFlow();
-          }
         }
 
         async checkConnection() {
@@ -534,8 +531,8 @@
             console.log('✓ Valid session found');
             const hasTenant = await this.checkTenantExists();
             if (!hasTenant) {
-              // No tenant - show creation flow
-              await this.showTenantCreationFlow();
+              // No tenant - show connected status with "Create new tenant" button instead of auto-showing wizard
+              this.showConnectedStatus(); // Will include the button
               return false;
             }
             this.showConnectedStatus();
@@ -592,12 +589,7 @@
             // No valid session or refresh token
             console.log('⚠️ No session or refresh token found');
             
-            // If no OAuth config, show tenant creation flow instead of disconnected status
-            if (!OAUTH_CONFIG.clientId) {
-              await this.showTenantCreationFlow();
-              return false;
-            }
-            
+            // Show disconnected status with "Create new tenant" button
             this.showDisconnectedStatus();
             return false;
           }
@@ -655,6 +647,7 @@
             <div class="button-group">
               <button class="btn" onclick="auth.disconnect()">Disconnect</button>
               <button class="btn btn-success" onclick="auth.testConnection()">Test Connection</button>
+              <button class="btn btn-primary" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
             </div>
 
             <div id="test-result"></div>
@@ -684,6 +677,7 @@
             </div>
 
             <button class="btn btn-success" onclick="auth.startOAuthFlow()">Connect to SideDrawer</button>
+            <button class="btn btn-outline mt-10" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
           `;
         }
 
@@ -739,6 +733,9 @@
         }
 
         async showTenantCreationFlow() {
+          const session = await this.getZohoSession();
+          const token = await this.getAccessToken();
+          
           // Ensure tenant-wizard container exists
           let wizardContainer = document.getElementById('tenant-wizard');
           if (!wizardContainer) {
@@ -759,28 +756,50 @@
             appContent.style.display = 'none';
           }
           
-          // Wait for tenantWizard to be available (it's created after SideDrawerAuth)
-          let attempts = 0;
-          const maxAttempts = 50; // Wait up to 5 seconds (50 * 100ms)
-          
-          while (attempts < maxAttempts) {
-            if (typeof window.tenantWizard !== 'undefined' && window.tenantWizard) {
-              try {
-                await window.tenantWizard.init();
-                return;
-              } catch (error) {
-                const dict = window.tenantWizard?.state?.dictionary || {};
-                this.showError(dict.globalparams_error || 'Failed to initialize tenant creation wizard: ' + error.message);
-                return;
+          // Determine which wizard to use based on auth state
+          if (session && token) {
+            // Logged-in user - use credentials wizard
+            let attempts = 0;
+            const maxAttempts = 50;
+            
+            while (attempts < maxAttempts) {
+              if (typeof window.tenantWizardWithCredentials !== 'undefined' && window.tenantWizardWithCredentials) {
+                try {
+                  await window.tenantWizardWithCredentials.init(token);
+                  return;
+                } catch (error) {
+                  const dict = window.tenantWizardWithCredentials?.state?.dictionary || {};
+                  this.showError(dict.globalparams_error || 'Failed to initialize tenant creation wizard: ' + error.message);
+                  return;
+                }
               }
+              await new Promise(resolve => setTimeout(resolve, 100));
+              attempts++;
             }
-            // Wait 100ms before checking again
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
+            
+            this.showError('Tenant creation wizard for logged-in users is not available. Please refresh the page.');
+          } else {
+            // Non-logged-in user - use existing wizard
+            let attempts = 0;
+            const maxAttempts = 50;
+            
+            while (attempts < maxAttempts) {
+              if (typeof window.tenantWizard !== 'undefined' && window.tenantWizard) {
+                try {
+                  await window.tenantWizard.init();
+                  return;
+                } catch (error) {
+                  const dict = window.tenantWizard?.state?.dictionary || {};
+                  this.showError(dict.globalparams_error || 'Failed to initialize tenant creation wizard: ' + error.message);
+                  return;
+                }
+              }
+              await new Promise(resolve => setTimeout(resolve, 100));
+              attempts++;
+            }
+            
+            this.showError('Tenant creation wizard is not available. Please refresh the page.');
           }
-          
-          // If we get here, tenantWizard never became available
-          this.showError('Tenant creation wizard is not available. Please refresh the page.');
         }
 
         async startOAuthFlow() {
