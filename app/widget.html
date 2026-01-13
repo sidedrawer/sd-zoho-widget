@@ -6,207 +6,14 @@
     <title>SideDrawer Integration</title>
     <!-- Zoho CRM SDK -->
     <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
-        background: #f9fafb;
-        padding: 20px;
-      }
-
-      .container {
-        max-width: 800px;
-        margin: 0 auto;
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        padding: 40px;
-      }
-
-      .header {
-        text-align: center;
-        margin-bottom: 30px;
-      }
-
-      .header h1 {
-        color: #1f2937;
-        font-size: 30px;
-        font-weight: 700;
-        margin-bottom: 8px;
-      }
-
-      .header p {
-        color: #6b7280;
-        font-size: 15px;
-        font-weight: 400;
-      }
-
-      .status-card {
-        background: #f9fafb;
-        border-radius: 6px;
-        padding: 24px;
-        margin-bottom: 24px;
-        border-left: 4px solid #1e88e5;
-      }
-
-      .status-card.connected {
-        border-left-color: #10b981;
-        background: #d1fae5;
-      }
-
-      .status-card.error {
-        border-left-color: #dc2626;
-        background: #fef2f2;
-      }
-
-      .status-indicator {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-
-      .status-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: #95a5a6;
-      }
-
-      .status-dot.connected {
-        display: none; /* Hide the dot when connected, text has bullet point */
-      }
-
-      .status-dot.error {
-        background: #e74c3c;
-      }
-
-      .status-text {
-        font-weight: 600;
-        color: #1f2937;
-        font-size: 17px;
-      }
-
-      .status-card.connected .status-text {
-        font-weight: 700;
-        color: #064e3b;
-      }
-
-      .btn {
-        display: inline-block;
-        padding: 11px 20px;
-        background: #f3f4f6;
-        color: #374151;
-        border: 1px solid #d1d5db;
-        border-radius: 4px;
-        font-size: 15px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-        text-decoration: none;
-      }
-
-      .btn:hover {
-        background: #e5e7eb;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      }
-
-      .btn:active {
-        transform: translateY(0);
-      }
-
-      .btn.btn-success {
-        background: #FF8C42;
-        color: white;
-        border-color: #FF8C42;
-      }
-
-      .btn.btn-success:hover {
-        background: #ff7a28;
-        border-color: #ff7a28;
-      }
-
-      .info-section {
-        margin-top: 20px;
-        padding: 20px;
-        background: #fff;
-        border: 1px solid #e5e7eb;
-        border-radius: 6px;
-        font-size: 14px;
-        color: #4b5563;
-        line-height: 1.6;
-      }
-
-      .info-section strong {
-        color: #111827;
-        font-weight: 600;
-      }
-
-      .info-section p {
-        margin: 8px 0;
-      }
-
-      .loading {
-        text-align: center;
-        padding: 40px;
-        color: #6b7280;
-      }
-
-      .spinner {
-        border: 3px solid #e5e7eb;
-        border-top: 3px solid #1e88e5;
-        border-radius: 50%;
-        width: 40px;
-        height: 40px;
-        animation: spin 1s linear infinite;
-        margin: 0 auto 15px;
-      }
-
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-
-      .error-message {
-        background: #fef2f2;
-        border: 1px solid #fca5a5;
-        color: #991b1b;
-        padding: 16px;
-        border-radius: 6px;
-        margin-top: 15px;
-        font-size: 14px;
-      }
-
-      .success-message {
-        background: #ecfdf5;
-        border: 1px solid #86efac;
-        color: #065f46;
-        padding: 16px;
-        border-radius: 6px;
-        margin-top: 15px;
-        font-size: 14px;
-      }
-
-      .button-group {
-        display: flex;
-        gap: 10px;
-        margin-top: 15px;
-      }
-
-      .token-info {
-        margin-top: 15px;
-        padding: 16px;
-        background: #f9fafb;
-        border-radius: 6px;
-        font-size: 13px;
-        color: #6b7280;
-      }
-    </style>
+    <!-- Stripe.js for PCI-compliant payment processing -->
+    <script src="https://js.stripe.com/v3/"></script>
+    <!-- External CSS -->
+    <link rel="stylesheet" href="widget.css">
+    <!-- Tenant Creation Wizard (non-logged-in) -->
+    <script src="tenant-wizard.js"></script>
+    <!-- Tenant Creation Wizard (logged-in) -->
+    <script src="tenant-wizard-with-credentials.js"></script>
   </head>
   <body>
     <div class="container">
@@ -221,6 +28,9 @@
           <p>Initializing connection...</p>
         </div>
       </div>
+      
+      <!-- Tenant Creation Wizard Container (hidden by default) -->
+      <div id="tenant-wizard" class="hidden"></div>
     </div>
 
       <script>
@@ -563,7 +373,7 @@
                 <div class="loading">
                   <div class="spinner"></div>
                   <p>Completing authentication...</p>
-                  <p style="font-size: 12px; color: #666; margin-top: 10px;">This window will close automatically...</p>
+                  <p class="text-small-gray mt-10">This window will close automatically...</p>
                 </div>
               `;
               
@@ -685,7 +495,7 @@
                   <div class="error-message">
                     ✗ Authentication failed
                     <br><small>${error.message}</small>
-                    <br><small style="margin-top: 10px; display: block;">Check browser console for details. Window will close in 5 seconds...</small>
+                    <br><small class="mt-10 block">Check browser console for details. Window will close in 5 seconds...</small>
                   </div>
                 `;
                 
@@ -707,7 +517,7 @@
           }
 
           // Check existing token
-          await this.checkConnection();
+          const hasSession = await this.checkConnection();
         }
 
         async checkConnection() {
@@ -717,9 +527,16 @@
           
           // Check if session exists and token is valid
           if (session && session.accessToken && !this.isTokenExpired(session.expiresAt)) {
-            // Valid session exists
+            // Valid session exists - check if tenant exists
             console.log('✓ Valid session found');
+            const hasTenant = await this.checkTenantExists();
+            if (!hasTenant) {
+              // No tenant - show connected status with "Create new tenant" button instead of auto-showing wizard
+              this.showConnectedStatus(); // Will include the button
+              return false;
+            }
             this.showConnectedStatus();
+            return true;
           } else if (session && session.accessToken && this.isTokenExpired(session.expiresAt)) {
             // Session exists but token is EXPIRED - try to revive it
             console.log('🔄 Dead session detected (expired token) - attempting automatic revival...');
@@ -748,14 +565,14 @@
                     <div class="status-dot error"></div>
                     <span class="status-text">Session Expired - Re-authentication Required</span>
                   </div>
-                  <p style="color: #6b7280; font-size: 14px; margin-top: 8px;">
+                  <p class="status-info-text">
                     Your session expired and cannot be refreshed automatically because it was created before refresh token storage was implemented.
                   </p>
-                  <p style="color: #6b7280; font-size: 14px; margin-top: 8px;">
+                  <p class="status-info-text">
                     Please click "Connect to SideDrawer" below to re-authenticate. Your new session will include refresh token support.
                   </p>
                 </div>
-                <button class="btn btn-success" onclick="auth.startOAuthFlow()" style="margin-top: 20px;">Connect to SideDrawer</button>
+                <button class="btn btn-success mt-20" onclick="auth.startOAuthFlow()">Connect to SideDrawer</button>
               `;
             }
           } else if (refreshToken) {
@@ -771,7 +588,10 @@
           } else {
             // No valid session or refresh token
             console.log('⚠️ No session or refresh token found');
+            
+            // Show disconnected status with "Create new tenant" button
             this.showDisconnectedStatus();
+            return false;
           }
         }
 
@@ -814,19 +634,20 @@
                 <div class="status-dot connected"></div>
                 <span class="status-text">Connected to SideDrawer</span>
               </div>
-              <p style="color: #6b7280; font-size: 14px; margin-top: 8px;">Your integration is active and ready to use.</p>
+              <p class="status-info-text">Your integration is active and ready to use.</p>
             </div>
 
-            <div style="margin-top:20px;padding:20px;background:#fff;border:1px solid #e5e7eb;border-radius:6px">
-              <p style="margin:8px 0;color:#4b5563;font-size:14px"><strong style="color:#111827;font-weight:600">Status:</strong> Authenticated</p>
-              <p style="margin:8px 0;color:#4b5563;font-size:14px"><strong style="color:#111827;font-weight:600">Storage:</strong> ${this.zohoInitialized ? 'Zoho Session (shared across widgets)' : 'localStorage (fallback)'}</p>
-              <p style="margin:8px 0;color:#4b5563;font-size:14px"><strong style="color:#111827;font-weight:600">Token Expires:</strong> ${expiryDate.toLocaleString()}</p>
-              <p style="margin:8px 0;color:#4b5563;font-size:14px"><strong style="color:#111827;font-weight:600">Silent Refresh:</strong> ${hasRefreshToken ? 'Enabled' : 'Disabled'}</p>
+            <div class="status-info-box">
+              <p class="status-info-item"><strong class="status-info-label">Status:</strong> Authenticated</p>
+              <p class="status-info-item"><strong class="status-info-label">Storage:</strong> ${this.zohoInitialized ? 'Zoho Session (shared across widgets)' : 'localStorage (fallback)'}</p>
+              <p class="status-info-item"><strong class="status-info-label">Token Expires:</strong> ${expiryDate.toLocaleString()}</p>
+              <p class="status-info-item"><strong class="status-info-label">Silent Refresh:</strong> ${hasRefreshToken ? 'Enabled' : 'Disabled'}</p>
             </div>
 
             <div class="button-group">
               <button class="btn" onclick="auth.disconnect()">Disconnect</button>
               <button class="btn btn-success" onclick="auth.testConnection()">Test Connection</button>
+              <button class="btn btn-primary" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
             </div>
 
             <div id="test-result"></div>
@@ -840,7 +661,7 @@
                 <div class="status-dot"></div>
                 <span class="status-text">Not Connected</span>
               </div>
-              <p style="color: #6b7280; font-size: 14px;">Connect your SideDrawer account to enable the integration.</p>
+              <p class="text-muted-sm">Connect your SideDrawer account to enable the integration.</p>
             </div>
 
             <div class="info-section">
@@ -848,7 +669,7 @@
               <p>SideDrawer is a secure document storage and sharing platform designed for financial advisors and their clients.</p>
               <br>
               <p><strong>This integration allows you to:</strong></p>
-              <ul style="margin-left: 20px; margin-top: 10px; color: #4b5563;">
+              <ul class="list-item-spaced">
                 <li>Access SideDrawer documents directly from Zoho CRM</li>
                 <li>Share content with clients through SideDrawer</li>
                 <li>Manage client documents securely</li>
@@ -856,6 +677,7 @@
             </div>
 
             <button class="btn btn-success" onclick="auth.startOAuthFlow()">Connect to SideDrawer</button>
+            <button class="btn btn-outline mt-10" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
           `;
         }
 
@@ -882,11 +704,111 @@
           `;
         }
 
+        async checkTenantExists() {
+          try {
+            const token = await this.getAccessToken();
+            if (!token) return false;
+
+            const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
+            const tenantApi = isSandbox
+              ? 'https://tenants-gateway-api-sbx.sidedrawersbx.com/api/v1/tenants/tenant/shared'
+              : 'https://tenants-gateway-api.sidedrawer.com/api/v1/tenants/tenant/shared';
+
+            const response = await fetch(tenantApi, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+
+            if (response.ok) {
+              const tenants = await response.json();
+              return tenants && tenants.length > 0;
+            }
+            return false;
+          } catch (error) {
+            console.error('❌ Error checking tenant:', error);
+            return false;
+          }
+        }
+
+        async showTenantCreationFlow() {
+          const session = await this.getZohoSession();
+          const token = await this.getAccessToken();
+          
+          // Ensure tenant-wizard container exists
+          let wizardContainer = document.getElementById('tenant-wizard');
+          if (!wizardContainer) {
+            wizardContainer = document.createElement('div');
+            wizardContainer.id = 'tenant-wizard';
+            wizardContainer.style.display = 'none';
+            const container = document.querySelector('.container');
+            if (container) {
+              container.appendChild(wizardContainer);
+            } else {
+              document.body.appendChild(wizardContainer);
+            }
+          }
+          
+          // Hide main content
+          const appContent = document.getElementById('app-content');
+          if (appContent) {
+            appContent.style.display = 'none';
+          }
+          
+          // Determine which wizard to use based on auth state
+          if (session && token) {
+            // Logged-in user - use credentials wizard
+            let attempts = 0;
+            const maxAttempts = 50;
+            
+            while (attempts < maxAttempts) {
+              if (typeof window.tenantWizardWithCredentials !== 'undefined' && window.tenantWizardWithCredentials) {
+                try {
+                  await window.tenantWizardWithCredentials.init(token);
+                  return;
+                } catch (error) {
+                  const dict = window.tenantWizardWithCredentials?.state?.dictionary || {};
+                  this.showError(dict.globalparams_error || 'Failed to initialize tenant creation wizard: ' + error.message);
+                  return;
+                }
+              }
+              await new Promise(resolve => setTimeout(resolve, 100));
+              attempts++;
+            }
+            
+            this.showError('Tenant creation wizard for logged-in users is not available. Please refresh the page.');
+          } else {
+            // Non-logged-in user - use existing wizard
+            let attempts = 0;
+            const maxAttempts = 50;
+            
+            while (attempts < maxAttempts) {
+              if (typeof window.tenantWizard !== 'undefined' && window.tenantWizard) {
+                try {
+                  await window.tenantWizard.init();
+                  return;
+                } catch (error) {
+                  const dict = window.tenantWizard?.state?.dictionary || {};
+                  this.showError(dict.globalparams_error || 'Failed to initialize tenant creation wizard: ' + error.message);
+                  return;
+                }
+              }
+              await new Promise(resolve => setTimeout(resolve, 100));
+              attempts++;
+            }
+            
+            this.showError('Tenant creation wizard is not available. Please refresh the page.');
+          }
+        }
+
         async startOAuthFlow() {
           try {
             // Validate configuration
             if (!OAUTH_CONFIG.clientId) {
-              throw new Error('Client ID not configured. Please provide it via URL parameter (?client_id=XXX) or configure in Zoho CRM settings.');
+              // If no OAuth config, show tenant creation flow directly
+              await this.showTenantCreationFlow();
+              return;
             }
             
             // Generate PKCE code verifier and challenge
@@ -907,10 +829,6 @@
             const state = JSON.stringify(stateObj);
             const encodedState = btoa(state);
             
-            console.log('✓ State object:', { random: stateObj.random, verifier: stateObj.verifier.substring(0, 10) + '...' });
-            console.log('✓ State JSON length:', state.length);
-            console.log('✓ Encoded state length:', encodedState.length);
-            
             const authUrl = new URL(OAUTH_CONFIG.authorizationEndpoint);
             authUrl.searchParams.append('response_type', 'code');
             authUrl.searchParams.append('client_id', OAUTH_CONFIG.clientId);
@@ -921,18 +839,10 @@
             authUrl.searchParams.append('code_challenge_method', 'S256');
             authUrl.searchParams.append('state', encodedState);
 
-            console.log('Starting OAuth flow...');
-            console.log('Authorization URL:', authUrl.toString().substring(0, 100) + '...');
-            console.log('Redirect URI:', OAUTH_CONFIG.redirectUri);
-            console.log('Client ID:', OAUTH_CONFIG.clientId);
-
             // Check if we're running inside an iframe (Zoho)
             const isInIframe = window.self !== window.top;
-            console.log('Is in iframe:', isInIframe);
 
             if (isInIframe) {
-              console.log('Detected iframe environment - opening popup window');
-              
               // Open popup window for OAuth (works in Zoho iframe)
               const width = 600;
               const height = 700;
@@ -940,8 +850,6 @@
               const top = (screen.height - height) / 2;
               
               const popupUrl = authUrl.toString();
-              console.log('🚀 Opening popup to:', popupUrl.substring(0, 150) + '...');
-              console.log('🔑 State parameter in URL:', authUrl.searchParams.get('state')?.substring(0, 50) + '...');
               
               const popup = window.open(
                 popupUrl,
@@ -960,8 +868,8 @@
                     <div class="status-dot"></div>
                     <span class="status-text">Authenticating...</span>
                   </div>
-                  <p style="color: #555; font-size: 14px;">Please complete the login in the popup window.</p>
-                  <p style="color: #999; font-size: 12px; margin-top: 10px;">
+                  <p class="auth-info-text">Please complete the login in the popup window.</p>
+                  <p class="auth-info-text-small">
                     Don't see the popup? Check if your browser blocked it and allow popups for this site.
                   </p>
                 </div>
@@ -1176,7 +1084,7 @@
         async testConnection() {
           const resultDiv = document.getElementById('test-result');
           resultDiv.innerHTML = `
-            <div class="loading" style="padding: 20px;">
+            <div class="loading loading-padded">
               <div class="spinner"></div>
               <p>Testing connection...</p>
             </div>
@@ -1208,16 +1116,16 @@
                   <div class="success-message">
                     ✓ Connection test successful!
                   </div>
-                  <div class="info-section" style="margin-top: 15px;">
-                    <strong style="display: block; margin-bottom: 10px;">Tenant Information:</strong>
+                  <div class="info-section info-section-spaced">
+                    <strong class="info-section-title">Tenant Information:</strong>
                     <p><strong>Tenant ID:</strong> ${tenantInfo.tenantId}</p>
                     <p><strong>Brand Code:</strong> ${tenantInfo.brandCode}</p>
                     <p><strong>Region:</strong> ${tenantInfo.region}</p>
                   </div>
-                  <div class="token-info" style="margin-top: 15px;">
-                    <strong style="display: block; margin-bottom: 5px;">Access Token:</strong>
-                    <code style="word-break: break-all; font-size: 11px; display: block; background: #fff; padding: 8px; border-radius: 4px; border: 1px solid #ddd; max-height: 100px; overflow-y: auto;">${token}</code>
-                    <button class="btn" style="margin-top: 10px; padding: 8px 16px; font-size: 14px;" onclick="navigator.clipboard.writeText('${token}').then(() => alert('Token copied to clipboard!'))">📋 Copy Token</button>
+                  <div class="token-info token-info-spaced">
+                    <strong class="token-info-title">Access Token:</strong>
+                    <code class="code-block">${token}</code>
+                    <button class="btn btn-small" onclick="navigator.clipboard.writeText('${token}').then(() => alert('Token copied to clipboard!'))">📋 Copy Token</button>
                   </div>
                 `;
               } else {
@@ -1446,7 +1354,7 @@
         }
       }
 
-      // Initialize auth manager
+      // Tenant Creation Wizard, StripeService, and TenantCreationWizard classes are in tenant-wizard.js
       const auth = new SideDrawerAuth();
       
       // Helper function to check session status (can be called from console)

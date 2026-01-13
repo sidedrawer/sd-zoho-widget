@@ -262,35 +262,3 @@ if (typeof window !== 'undefined') {
   window.SideDrawerAPI = SideDrawerAPI;
 }
 
-// Usage example:
-/*
-const api = new SideDrawerAPI();
-
-// Check if authenticated
-if (api.isAuthenticated()) {
-  // Get tenant information
-  const tenantInfo = await api.getTenantInfo();
-  console.log('Tenant:', tenantInfo);
-  // { tenantId: "...", brandCode: "...", region: "..." }
-
-  // Get current user
-  const user = await api.getCurrentUser();
-  console.log('User:', user);
-
-  // Get documents
-  const documents = await api.getDocuments({ limit: 10 });
-  console.log('Documents:', documents);
-
-  // Get clients
-  const clients = await api.getClients();
-  console.log('Clients:', clients);
-
-  // Share a document
-  await api.shareDocument('doc-123', {
-    recipientEmail: 'client@example.com',
-    message: 'Here is your document',
-    permissions: ['view', 'download']
-  });
-}
-*/
-
