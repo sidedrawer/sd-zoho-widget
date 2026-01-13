@@ -201,7 +201,7 @@ class TenantCreationWizardWithCredentials {
       // Process tracking
       processSteps: [],
       // Skip steps flag
-      skipSubscriptionAndPayment: false, // Set to true if user has default payment method
+      skipPayment: false, // Set to true if user has default payment method (skip payment step only)
       // UI State
       loading: false,
       error: null,
@@ -262,22 +262,10 @@ class TenantCreationWizardWithCredentials {
         await this.loadPaymentMethods();
         console.log('✅ Payment methods loaded');
         
-        // Check if user has default payment method - if yes, skip steps 2 and 3
+        // Check if user has default payment method - if yes, skip payment step only
         if (this.state.hasDefaultPaymentMethod && this.state.selectedPaymentMethod) {
-          console.log('💳 Default payment method found - skipping subscription and payment steps');
-          this.state.skipSubscriptionAndPayment = true;
-          // Set default price if available (use first users price as default)
-          if (this.state.prices.length > 0 && this.state.currency) {
-            this.updatePriceLists();
-            const usersPrices = this.state.priceTab === 'month' ? this.state.monthlyUsersPrices : this.state.yearlyUsersPrices;
-            if (usersPrices.length > 0) {
-              this.state.selectedPrice = usersPrices[0];
-              // Set default users count from price metadata
-              const minUsers = parseInt(this.state.selectedPrice.metadata?.['product.startingUsers'] || '1', 10);
-              this.state.totalAdminUsers = minUsers;
-              console.log(`💰 Auto-selected price: ${this.state.selectedPrice.id}, users: ${minUsers}`);
-            }
-          }
+          console.log('💳 Default payment method found - skipping payment step only');
+          this.state.skipPayment = true;
         }
       } else {
         console.log('ℹ️ No customerId found in account - skipping customer and payment method loading');
@@ -704,18 +692,18 @@ class TenantCreationWizardWithCredentials {
             <div class="wizard-step-circle">${this.state.currentStep > 0 ? '✓' : '1'}</div>
             <div class="wizard-step-label">${this.getDictionaryValue('tenantsetupname_steptitle') || 'Business Info'}</div>
           </div>
-          ${!this.state.skipSubscriptionAndPayment ? `
           <div class="wizard-step ${this.state.currentStep === 1 ? 'active' : this.state.currentStep > 1 ? 'completed' : ''}">
             <div class="wizard-step-circle">${this.state.currentStep > 1 ? '✓' : '2'}</div>
             <div class="wizard-step-label">${this.getDictionaryValue('tenantsetupsubscription_steptitle') || 'Subscription'}</div>
           </div>
+          ${!this.state.skipPayment ? `
           <div class="wizard-step ${this.state.currentStep === 2 ? 'active' : this.state.currentStep > 2 ? 'completed' : ''}">
             <div class="wizard-step-circle">${this.state.currentStep > 2 ? '✓' : '3'}</div>
             <div class="wizard-step-label">${this.getDictionaryValue('tenantsetuppayment_steptitle') || 'Payment'}</div>
           </div>
           ` : ''}
-          <div class="wizard-step ${this.state.currentStep === (this.state.skipSubscriptionAndPayment ? 1 : 3) ? 'active' : this.state.currentStep > (this.state.skipSubscriptionAndPayment ? 1 : 3) ? 'completed' : ''}">
-            <div class="wizard-step-circle">${this.state.currentStep > (this.state.skipSubscriptionAndPayment ? 1 : 3) ? '✓' : (this.state.skipSubscriptionAndPayment ? '2' : '4')}</div>
+          <div class="wizard-step ${this.state.currentStep === (this.state.skipPayment ? 2 : 3) ? 'active' : this.state.currentStep > (this.state.skipPayment ? 2 : 3) ? 'completed' : ''}">
+            <div class="wizard-step-circle">${this.state.currentStep > (this.state.skipPayment ? 2 : 3) ? '✓' : (this.state.skipPayment ? '3' : '4')}</div>
             <div class="wizard-step-label">${this.getDictionaryValue('tenantsignupsummary_steptitle') || 'Summary'}</div>
           </div>
         </div>
@@ -726,8 +714,8 @@ class TenantCreationWizardWithCredentials {
 
         <div class="wizard-footer">
           ${this.state.currentStep > 0 ? `<button class="btn" onclick="tenantWizardWithCredentials.previousStep()">${this.getDictionaryValue('globalparams_back') || 'Back'}</button>` : '<div></div>'}
-          <button class="btn btn-success" onclick="if(window.tenantWizardWithCredentials){window.tenantWizardWithCredentials.nextStep();}else{console.error('tenantWizardWithCredentials not found');}" ${this.state.loading ? 'disabled' : ''} id="wizard-next-button">
-            ${(this.state.skipSubscriptionAndPayment && this.state.currentStep === 1) || (!this.state.skipSubscriptionAndPayment && this.state.currentStep === 3)
+          <button class="btn btn-success" ${this.state.loading ? 'disabled' : ''} id="wizard-next-button">
+            ${(this.state.skipPayment && this.state.currentStep === 2) || (!this.state.skipPayment && this.state.currentStep === 3)
               ? (this.getDictionaryValue('tenantsetuppayment_primarybutton') || 'Create Account')
               : (this.getDictionaryValue('globalparams_next') || 'Next')}
           </button>
@@ -741,16 +729,17 @@ class TenantCreationWizardWithCredentials {
   renderStep() {
     if (this.state.currentStep === 0) {
       return this.renderStep1();
-    } else if (this.state.skipSubscriptionAndPayment) {
-      // Skip steps 2 and 3, go directly to summary
-      if (this.state.currentStep === 1) {
+    } else if (this.state.currentStep === 1) {
+      // Always show subscription step
+      return this.renderStep2();
+    } else if (this.state.skipPayment) {
+      // Skip payment step, go directly to summary
+      if (this.state.currentStep === 2) {
         return this.renderStep4();
       }
     } else {
-      // Normal flow with all steps
-      if (this.state.currentStep === 1) {
-        return this.renderStep2();
-      } else if (this.state.currentStep === 2) {
+      // Normal flow with payment step
+      if (this.state.currentStep === 2) {
         return this.renderStep3();
       } else if (this.state.currentStep === 3) {
         return this.renderStep4();
@@ -1028,8 +1017,8 @@ class TenantCreationWizardWithCredentials {
       `;
     }
     
-    // Show payment method info if steps were skipped
-    const paymentMethodInfo = this.state.skipSubscriptionAndPayment && this.state.selectedPaymentMethod ? `
+    // Show payment method info if payment step was skipped
+    const paymentMethodInfo = this.state.skipPayment && this.state.selectedPaymentMethod ? `
       <div class="mb-24">
         <h4>${dict.paymentdetails_selectpaymentmethod || 'Payment Method'}</h4>
         <div class="payment-method-display">
@@ -1184,21 +1173,21 @@ class TenantCreationWizardWithCredentials {
       }
     }
 
-    // Summary step listeners (step 4 in normal flow, step 2 if skipping)
-    const summaryStep = this.state.skipSubscriptionAndPayment ? 1 : 3;
-    if (this.state.currentStep === summaryStep) {
-      const nextButton = document.getElementById('wizard-next-button');
-      if (nextButton) {
-        const newButton = nextButton.cloneNode(true);
-        nextButton.parentNode.replaceChild(newButton, nextButton);
-        
-        newButton.addEventListener('click', (e) => {
-          e.preventDefault();
-          if (window.tenantWizardWithCredentials) {
-            window.tenantWizardWithCredentials.nextStep();
-          }
-        });
-      }
+    // Attach click listener to next button (always, not just summary step)
+    const nextButton = document.getElementById('wizard-next-button');
+    if (nextButton) {
+      // Remove any existing listeners by cloning the button
+      const newButton = nextButton.cloneNode(true);
+      nextButton.parentNode.replaceChild(newButton, nextButton);
+      
+      newButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.state.loading) return; // Prevent clicks while loading
+        if (window.tenantWizardWithCredentials) {
+          window.tenantWizardWithCredentials.nextStep();
+        }
+      });
     }
   }
 
@@ -1272,29 +1261,10 @@ class TenantCreationWizardWithCredentials {
         return;
       }
       
-      // If user has default payment method, skip to summary (step 1 becomes summary)
-      if (this.state.skipSubscriptionAndPayment) {
-        // Validate that we have a default price selected
-        if (!this.state.selectedPrice) {
-          this.state.validationError = dict.tenantsetupsubscription_selectplan || 'Please select a subscription plan';
-          this.render();
-          return;
-        }
-        if (!this.state.totalAdminUsers || this.state.totalAdminUsers < 1) {
-          this.state.validationError = dict.tenantsignupsubscription_usersrequired || 'Please enter the number of admin users';
-          this.render();
-          return;
-        }
-        this.state.currentStep = 1; // Summary step
-        this.render();
-        this.attachListeners();
-        return;
-      }
-      
-      // Normal flow: go to subscription step
+      // Always go to subscription step
       this.state.currentStep = 1;
-    } else if (this.state.currentStep === 1 && !this.state.skipSubscriptionAndPayment) {
-      // Step 2: Subscription (only if not skipped)
+    } else if (this.state.currentStep === 1) {
+      // Step 2: Subscription (always shown)
       if (!this.state.selectedPrice) {
         this.state.validationError = dict.tenantsetupsubscription_selectplan || 'Please select a subscription plan';
         this.render();
@@ -1305,10 +1275,16 @@ class TenantCreationWizardWithCredentials {
         this.render();
         return;
       }
-      this.state.currentStep = 2;
+      
+      // If payment step is skipped, go directly to summary
+      if (this.state.skipPayment) {
+        this.state.currentStep = 2; // Summary step
+      } else {
+        this.state.currentStep = 2; // Payment step
+      }
       this.render();
       this.attachListeners();
-    } else if (this.state.currentStep === 2) {
+    } else if (this.state.currentStep === 2 && !this.state.skipPayment) {
       // Step 3: Payment (only if not skipped)
       if (!this.state.selectedPaymentMethod && !this.state.stripePublicKey) {
         this.state.validationError = dict.paymentdetails_selectpaymentmethod || 'Please select or add a payment method';
@@ -1350,11 +1326,11 @@ class TenantCreationWizardWithCredentials {
         this.state.paymentMethodToken = pmId;
       }
       
-      this.state.currentStep = 3;
+      this.state.currentStep = 3; // Summary step
       this.render();
       this.attachListeners();
-    } else if ((this.state.skipSubscriptionAndPayment && this.state.currentStep === 1) || 
-               (!this.state.skipSubscriptionAndPayment && this.state.currentStep === 3)) {
+    } else if ((this.state.skipPayment && this.state.currentStep === 2) || 
+               (!this.state.skipPayment && this.state.currentStep === 3)) {
       // Final step: create tenant using Angular API flow
       try {
         await this.createTenant();
@@ -1373,9 +1349,9 @@ class TenantCreationWizardWithCredentials {
 
   previousStep() {
     if (this.state.currentStep > 0) {
-      // If skipping steps and on summary, go back to step 1
-      if (this.state.skipSubscriptionAndPayment && this.state.currentStep === 1) {
-        this.state.currentStep = 0;
+      // If skipping payment and on summary (step 2), go back to subscription (step 1)
+      if (this.state.skipPayment && this.state.currentStep === 2) {
+        this.state.currentStep = 1;
       } else {
         this.state.currentStep--;
       }
@@ -1641,6 +1617,14 @@ class TenantCreationWizardWithCredentials {
         ? 'https://api-sbx.sidedrawersbx.com/api/v1/tenants'
         : 'https://api.sidedrawer.com/api/v1/tenants';
       
+      // Validate required fields
+      if (!this.state.selectedPrice?.id) {
+        throw new Error('No subscription plan selected');
+      }
+      if (!paymentMethodId) {
+        throw new Error('Payment method is required');
+      }
+      
       const signupResponse = await fetch(`${tenantApiBase}/tenant/signup`, {
         method: 'POST',
         headers: {
@@ -1653,7 +1637,9 @@ class TenantCreationWizardWithCredentials {
           brandCode: this.state.tenantDomain,
           region: this.state.region,
           startingSideDrawers: this.state.totalAdminUsers || 1,
-          identityProvider: 'auth0'
+          identityProvider: 'auth0',
+          priceId: this.state.selectedPrice.id,
+          paymentMethodId: paymentMethodId
         })
       });
 
