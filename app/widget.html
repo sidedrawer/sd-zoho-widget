@@ -538,21 +538,20 @@
             this.showConnectedStatus();
             return true;
           } else if (session && session.accessToken && this.isTokenExpired(session.expiresAt)) {
-            // Session exists but token is EXPIRED - try to revive it
-            console.log('🔄 Dead session detected (expired token) - attempting automatic revival...');
+            // Session exists but token is EXPIRED
+            // DON'T refresh immediately on page load (F5) - let ensureValidSession() handle it when needed
+            // This prevents wasting silver bullets with invalid refresh tokens
+            console.log('⚠️ Expired session detected on page load');
             console.log('  Expires at:', session.expiresAt ? new Date(parseInt(session.expiresAt)).toISOString() : 'N/A');
             console.log('  Current time:', new Date().toISOString());
             console.log('  Refresh token available:', refreshToken ? 'YES' : 'NO');
             console.log('  Session keys:', session ? Object.keys(session) : []);
+            console.log('  Note: Refresh will happen automatically when needed via ensureValidSession()');
             
             if (refreshToken) {
-              document.getElementById('app-content').innerHTML = `
-                <div class="loading">
-                  <div class="spinner"></div>
-                  <p>Reviving expired session...</p>
-                </div>
-              `;
-              await this.refreshAccessToken();
+              // Show connected status - refresh will happen when API calls are made
+              this.showConnectedStatus();
+              return true;
             } else {
               console.warn('⚠️ Expired session found but no refresh token available');
               console.warn('⚠️ This session was created before refresh token storage was added');
@@ -596,33 +595,13 @@
         }
 
         startPeriodicTokenRefresh() {
-          // Clear existing interval
-          if (this.refreshInterval) {
-            clearInterval(this.refreshInterval);
-          }
-          
-          // Check and refresh token every 5 minutes
-          this.refreshInterval = setInterval(async () => {
-            console.log('🔄 Periodic token refresh check...');
-            const session = await this.getZohoSession();
-            const refreshToken = await this.getRefreshToken();
-            if (session && this.isTokenExpired(session.expiresAt)) {
-              console.log('🔄 Token expired, refreshing...');
-              await this.refreshAccessToken();
-            } else if (!session && refreshToken) {
-              console.log('🔄 No session but refresh token exists, refreshing...');
-              await this.refreshAccessToken();
-            } else {
-              console.log('✓ Token still valid');
-            }
-          }, 5 * 60 * 1000); // Every 5 minutes
-          
-          console.log('✅ Periodic token refresh started (every 5 minutes)');
+          // REMOVED: Periodic refresh wastes silver bullets
+          // Token refresh is now handled reactively by ensureValidSession() when actually needed
+          // This prevents unnecessary refresh attempts that waste refresh tokens
         }
 
         async showConnectedStatus() {
-          // Start periodic refresh to keep session alive
-          this.startPeriodicTokenRefresh();
+          // Periodic refresh removed - refresh happens reactively when needed via ensureValidSession()
           
           const session = await this.getZohoSession();
           const expiryDate = session ? new Date(parseInt(session.expiresAt)) : new Date();
