@@ -18,9 +18,20 @@ class SetupModal {
 
   /**
    * Check if user has permission to access setup modal
+   * Bypasses check in standalone mode (local development)
    * @returns {Promise<boolean>}
    */
   async checkPermission() {
+    // Check if we're in standalone mode (local development)
+    // In Zoho, widget runs in iframe (window.self !== window.top)
+    // When running locally (npm start), window.self === window.top
+    const isStandalone = window.self === window.top;
+    
+    if (isStandalone) {
+      console.log('[Setup Modal] Standalone mode detected (local dev) - bypassing permission check');
+      return true;
+    }
+    
     if (window.SetupAPI && typeof window.SetupAPI.checkUserHasManageOrgPermission === 'function') {
       return await window.SetupAPI.checkUserHasManageOrgPermission();
     }
@@ -33,35 +44,54 @@ class SetupModal {
    * @param {string} [options.preFillTenantId] - Pre-fill tenant ID from tenant creation
    */
   async open(options = {}) {
-    // Check permissions
-    const hasPermission = await this.checkPermission();
-    if (!hasPermission) {
-      this.showPermissionError();
-      return;
+    try {
+      // Check permissions
+      const hasPermission = await this.checkPermission();
+      if (!hasPermission) {
+        this.showPermissionError();
+        return;
+      }
+
+      // Load existing configuration
+      let existingConfig = null;
+      try {
+        if (window.SetupAPI && typeof window.SetupAPI.getSetupConfig === 'function') {
+          // Add timeout to prevent hanging
+          const configPromise = window.SetupAPI.getSetupConfig();
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Config load timeout')), 5000)
+          );
+          existingConfig = await Promise.race([configPromise, timeoutPromise]);
+        }
+      } catch (error) {
+        console.warn('[Setup Modal] Error loading existing config:', error);
+        // Continue with null config (will show empty form)
+      }
+
+      // Create modal HTML
+      const modalHTML = this.createModalHTML(existingConfig, options.preFillTenantId);
+      
+      // Create modal element
+      const modalDiv = document.createElement('div');
+      modalDiv.id = 'setup-modal-overlay';
+      modalDiv.className = 'modal-overlay';
+      modalDiv.innerHTML = modalHTML;
+      
+      // Add to body
+      document.body.appendChild(modalDiv);
+      this.modalElement = modalDiv;
+      this.isOpen = true;
+
+      // Setup event listeners
+      this.setupEventListeners(existingConfig, options.preFillTenantId);
+    } catch (error) {
+      console.error('[Setup Modal] Error opening modal:', error);
+      if (this.auth && typeof this.auth.showError === 'function') {
+        this.auth.showError('Failed to open setup modal: ' + error.message);
+      } else {
+        alert('Failed to open setup modal: ' + error.message);
+      }
     }
-
-    // Load existing configuration
-    let existingConfig = null;
-    if (window.SetupAPI && typeof window.SetupAPI.getSetupConfig === 'function') {
-      existingConfig = await window.SetupAPI.getSetupConfig();
-    }
-
-    // Create modal HTML
-    const modalHTML = this.createModalHTML(existingConfig, options.preFillTenantId);
-    
-    // Create modal element
-    const modalDiv = document.createElement('div');
-    modalDiv.id = 'setup-modal-overlay';
-    modalDiv.className = 'modal-overlay';
-    modalDiv.innerHTML = modalHTML;
-    
-    // Add to body
-    document.body.appendChild(modalDiv);
-    this.modalElement = modalDiv;
-    this.isOpen = true;
-
-    // Setup event listeners
-    this.setupEventListeners(existingConfig, options.preFillTenantId);
   }
 
   /**
@@ -255,6 +285,17 @@ class SetupModal {
 
       // Show success message
       this.showSuccess('Configuration saved successfully! Reloading widget...');
+
+      // In standalone mode, also save to localStorage for persistence
+      const isStandalone = window.self === window.top;
+      if (isStandalone) {
+        try {
+          localStorage.setItem('sd_widget_setup_config', JSON.stringify(config));
+          console.log('[Setup Modal] Also saved to localStorage for standalone mode');
+        } catch (e) {
+          console.warn('[Setup Modal] Failed to save to localStorage:', e);
+        }
+      }
 
       // Reload widget after short delay
       setTimeout(() => {

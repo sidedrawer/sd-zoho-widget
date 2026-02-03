@@ -12,12 +12,40 @@
 
 const SETUP_MODULE_NAME = 'SD_Widget_Setup';
 
+// Expose isStandaloneMode for use in other modules
+if (typeof window !== 'undefined') {
+  window.isStandaloneMode = isStandaloneMode;
+}
+
+/**
+ * Check if we're running in standalone mode (local development)
+ * @returns {boolean} True if running standalone (not in Zoho iframe)
+ */
+function isStandaloneMode() {
+  // Check if we're in an iframe (Zoho) or standalone (local dev)
+  const isInIframe = window.self !== window.top;
+  
+  // Standalone mode: not in iframe (running locally via npm start)
+  // In Zoho, the widget runs inside an iframe, so window.self !== window.top
+  // When running locally, window.self === window.top
+  const isStandalone = !isInIframe;
+  
+  return isStandalone;
+}
+
 /**
  * Check if current user has "Manage Organization" rights
  * Uses ZOHO.CRM.CONFIG.getCurrentUser() to check user role
- * @returns {Promise<boolean>} True if user is Administrator
+ * Bypasses check in standalone mode (local development)
+ * @returns {Promise<boolean>} True if user is Administrator or in standalone mode
  */
 async function checkUserHasManageOrgPermission() {
+  // Bypass permission check in standalone mode (local development)
+  if (isStandaloneMode()) {
+    console.log('[Setup API] Standalone mode detected - bypassing permission check');
+    return true;
+  }
+  
   try {
     const user = await ZOHO.CRM.CONFIG.getCurrentUser();
     const userData = user?.users?.[0];
@@ -55,6 +83,13 @@ async function checkUserHasManageOrgPermission() {
  * @returns {Promise<boolean>} True if module exists
  */
 async function checkSetupModuleExists() {
+  // Check if we're in standalone mode
+  const isStandalone = isStandaloneMode();
+  if (isStandalone) {
+    console.log('[Setup API] Standalone mode - skipping module existence check');
+    return false; // Assume module doesn't exist in standalone mode
+  }
+  
   try {
     // Try to get records from the module
     // If module doesn't exist, this will throw an error
@@ -76,6 +111,13 @@ async function checkSetupModuleExists() {
  * @returns {Promise<Object|null>} Setup config object or null if not found
  */
 async function getSetupConfig() {
+  // Check if we're in standalone mode
+  const isStandalone = isStandaloneMode();
+  if (isStandalone) {
+    console.log('[Setup API] Standalone mode - skipping custom module read');
+    return null;
+  }
+  
   try {
     const moduleExists = await checkSetupModuleExists();
     if (!moduleExists) {
@@ -135,7 +177,23 @@ async function getSetupConfig() {
  * @returns {Promise<Object>} Saved configuration object
  */
 async function saveSetupConfig(config) {
-  // Check permissions first
+  // Check if we're in standalone mode
+  const isStandalone = isStandaloneMode();
+  
+  // In standalone mode, allow saving to localStorage as fallback
+  if (isStandalone) {
+    console.log('[Setup API] Standalone mode - saving to localStorage (fallback)');
+    try {
+      localStorage.setItem('sd_widget_setup_config', JSON.stringify(config));
+      console.log('[Setup API] Config saved to localStorage');
+      return config; // Return config as-is for standalone mode
+    } catch (error) {
+      console.warn('[Setup API] Failed to save to localStorage:', error);
+      throw new Error('Failed to save configuration in standalone mode');
+    }
+  }
+  
+  // Check permissions first (in Zoho environment)
   const hasPermission = await checkUserHasManageOrgPermission();
   if (!hasPermission) {
     throw new Error('Permission denied: Only users with "Manage Organization" rights can configure credentials.');
@@ -221,36 +279,76 @@ async function saveSetupConfig(config) {
  * @returns {Promise<Object|null>} Credentials object or null
  */
 async function getCredentials() {
-  // First, try custom module
-  const customModuleConfig = await getSetupConfig();
-  if (customModuleConfig && customModuleConfig.clientId) {
-    console.log('[Setup API] Using credentials from custom module');
-    return {
-      clientId: customModuleConfig.clientId,
-      environment: customModuleConfig.environment,
-      redirectUri: customModuleConfig.redirectUri,
-      tenantId: customModuleConfig.tenantId,
-      brandCode: customModuleConfig.brandCode,
-      source: 'custom_module'
-    };
+  // Check if we're in standalone mode
+  const isStandalone = isStandaloneMode();
+  
+  // In standalone mode, skip Zoho API calls that might hang
+  if (isStandalone) {
+    console.log('[Setup API] Standalone mode - skipping Zoho API calls');
+    return null;
   }
   
-  // Fallback to widget variables
   try {
-    const widgetConfig = await ZOHO.CRM.CONFIG.getVariables();
-    if (widgetConfig && widgetConfig.client_id) {
-      console.log('[Setup API] Using credentials from widget variables (fallback)');
+    // First, try custom module
+    const customModuleConfig = await getSetupConfig();
+    if (customModuleConfig && customModuleConfig.clientId) {
+      console.log('[Setup API] Using credentials from custom module');
       return {
-        clientId: widgetConfig.client_id,
-        environment: widgetConfig.environment || 'sandbox',
-        redirectUri: widgetConfig.redirect_uri,
-        tenantId: null,
-        brandCode: null,
-        source: 'widget_variables'
+        clientId: customModuleConfig.clientId,
+        environment: customModuleConfig.environment,
+        redirectUri: customModuleConfig.redirectUri,
+        tenantId: customModuleConfig.tenantId,
+        brandCode: customModuleConfig.brandCode,
+        source: 'custom_module'
       };
     }
   } catch (error) {
-    console.warn('[Setup API] Could not load widget variables:', error);
+    console.warn('[Setup API] Error getting custom module config:', error);
+  }
+  
+  // Fallback to widget variables (only if not standalone)
+  if (!isStandalone) {
+    try {
+      if (typeof ZOHO !== 'undefined' && ZOHO.CRM && ZOHO.CRM.CONFIG) {
+        const widgetConfig = await ZOHO.CRM.CONFIG.getVariables();
+        if (widgetConfig && widgetConfig.client_id) {
+          console.log('[Setup API] Using credentials from widget variables (fallback)');
+          return {
+            clientId: widgetConfig.client_id,
+            environment: widgetConfig.environment || 'sandbox',
+            redirectUri: widgetConfig.redirect_uri,
+            tenantId: null,
+            brandCode: null,
+            source: 'widget_variables'
+          };
+        }
+      }
+    } catch (error) {
+      console.warn('[Setup API] Could not load widget variables:', error);
+    }
+  }
+  
+  // In standalone mode, try localStorage fallback
+  if (isStandalone) {
+    try {
+      const storedConfig = localStorage.getItem('sd_widget_setup_config');
+      if (storedConfig) {
+        const config = JSON.parse(storedConfig);
+        if (config && config.clientId) {
+          console.log('[Setup API] Using credentials from localStorage (standalone mode)');
+          return {
+            clientId: config.clientId,
+            environment: config.environment || 'sandbox',
+            redirectUri: config.redirectUri,
+            tenantId: config.tenantId || null,
+            brandCode: config.brandCode || null,
+            source: 'localStorage'
+          };
+        }
+      }
+    } catch (error) {
+      console.warn('[Setup API] Could not load from localStorage:', error);
+    }
   }
   
   console.log('[Setup API] No credentials found');

@@ -18,6 +18,8 @@
     <script src="setup-api.js"></script>
     <!-- Setup Modal Component -->
     <script src="setup-modal.js"></script>
+    <!-- Account Selection Modal Component -->
+    <script src="account-selection-modal.js"></script>
   </head>
   <body>
     <div class="container">
@@ -97,6 +99,7 @@
           this.refreshInterval = null;
           this.hasManageOrgPermission = false; // Store permission status
           this.setupModal = null; // Setup modal instance
+          this.accountSelectionModal = null; // Account selection modal instance
           this.initZoho();
         }
 
@@ -285,6 +288,12 @@
               window.setupModal = this.setupModal; // Make globally accessible
             }
             
+            // Initialize account selection modal
+            if (typeof window.AccountSelectionModal !== 'undefined') {
+              this.accountSelectionModal = new window.AccountSelectionModal(this);
+              window.accountSelectionModal = this.accountSelectionModal; // Make globally accessible
+            }
+            
             // Initialize after Zoho setup (or fallback)
             console.log('Proceeding with initialization (Zoho initialized:', this.zohoInitialized, ')');
             console.log('OAuth Redirect URI:', OAUTH_CONFIG.redirectUri);
@@ -296,80 +305,136 @@
 
         async loadZohoConfig() {
           try {
-            // Check user permissions first
-            if (window.SetupAPI && typeof window.SetupAPI.checkUserHasManageOrgPermission === 'function') {
-              this.hasManageOrgPermission = await window.SetupAPI.checkUserHasManageOrgPermission();
-              console.log('✓ Permission check:', this.hasManageOrgPermission ? 'Admin (can configure)' : 'Standard User (read-only)');
+            // Check if we're in standalone mode (local development)
+            // In Zoho, widget runs in iframe (window.self !== window.top)
+            // When running locally (npm start), window.self === window.top
+            const isStandalone = window.self === window.top;
+            
+            if (isStandalone) {
+              // Bypass permission check in standalone mode for local testing
+              this.hasManageOrgPermission = true;
+              console.log('✓ Standalone mode detected (local dev) - bypassing permission check (full access for testing)');
+              
+              // In standalone mode, check localStorage for credentials
+              try {
+                const storedConfig = localStorage.getItem('sd_widget_setup_config');
+                if (storedConfig) {
+                  const config = JSON.parse(storedConfig);
+                  if (config && config.clientId) {
+                    OAUTH_CONFIG.clientId = config.clientId;
+                    OAUTH_CONFIG.redirectUri = config.redirectUri || OAUTH_CONFIG.redirectUri;
+                    if (config.environment === 'production') {
+                      OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
+                      OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
+                      OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
+                    }
+                    console.log('✓ Loaded credentials from localStorage (standalone mode)');
+                    return;
+                  }
+                }
+              } catch (e) {
+                console.warn('[loadZohoConfig] Error loading from localStorage:', e);
+              }
+              
+              // In standalone mode, skip Zoho API calls
+              return;
+            }
+            
+            // Check user permissions in Zoho environment
+            try {
+              if (window.SetupAPI && typeof window.SetupAPI.checkUserHasManageOrgPermission === 'function') {
+                this.hasManageOrgPermission = await window.SetupAPI.checkUserHasManageOrgPermission();
+                console.log('✓ Permission check:', this.hasManageOrgPermission ? 'Admin (can configure)' : 'Standard User (read-only)');
+              }
+            } catch (error) {
+              console.warn('[loadZohoConfig] Error checking permissions:', error);
+              this.hasManageOrgPermission = false; // Default to false for security
             }
             
             // Priority 1: Try custom module first (via SetupAPI)
-            if (window.SetupAPI && typeof window.SetupAPI.getCredentials === 'function') {
-              const credentials = await window.SetupAPI.getCredentials();
-              
-              if (credentials && credentials.clientId) {
-                console.log('✓ Loaded credentials from:', credentials.source);
+            try {
+              if (window.SetupAPI && typeof window.SetupAPI.getCredentials === 'function') {
+                // Add timeout to prevent hanging
+                const credentialsPromise = window.SetupAPI.getCredentials();
+                const timeoutPromise = new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error('Credentials load timeout')), 5000)
+                );
+                const credentials = await Promise.race([credentialsPromise, timeoutPromise]);
                 
-                // Set OAuth config from custom module
-                OAUTH_CONFIG.clientId = credentials.clientId;
-                
-                if (credentials.redirectUri) {
-                  OAUTH_CONFIG.redirectUri = credentials.redirectUri;
-                  console.log('✓ Using redirect URI from custom module:', OAUTH_CONFIG.redirectUri);
+                if (credentials && credentials.clientId) {
+                  console.log('✓ Loaded credentials from:', credentials.source);
+                  
+                  // Set OAuth config from custom module
+                  OAUTH_CONFIG.clientId = credentials.clientId;
+                  
+                  if (credentials.redirectUri) {
+                    OAUTH_CONFIG.redirectUri = credentials.redirectUri;
+                    console.log('✓ Using redirect URI from custom module:', OAUTH_CONFIG.redirectUri);
+                  }
+                  
+                  // Set environment endpoints
+                  if (credentials.environment === 'production') {
+                    OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
+                    OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
+                    OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
+                    console.log('✓ Using PRODUCTION environment');
+                  } else {
+                    // Sandbox (default)
+                    OAUTH_CONFIG.authorizationEndpoint = 'https://auth-sbx.sidedrawersbx.com/authorize';
+                    OAUTH_CONFIG.tokenEndpoint = 'https://auth-sbx.sidedrawersbx.com/oauth/token';
+                    OAUTH_CONFIG.audience = 'https://user-api-sbx.sidedrawersbx.com';
+                    console.log('✓ Using SANDBOX environment');
+                  }
+                  
+                  return; // Successfully loaded from custom module
                 }
-                
-                // Set environment endpoints
-                if (credentials.environment === 'production') {
-                  OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
-                  OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
-                  OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
-                  console.log('✓ Using PRODUCTION environment');
-                } else {
-                  // Sandbox (default)
-                  OAUTH_CONFIG.authorizationEndpoint = 'https://auth-sbx.sidedrawersbx.com/authorize';
-                  OAUTH_CONFIG.tokenEndpoint = 'https://auth-sbx.sidedrawersbx.com/oauth/token';
-                  OAUTH_CONFIG.audience = 'https://user-api-sbx.sidedrawersbx.com';
-                  console.log('✓ Using SANDBOX environment');
-                }
-                
-                return; // Successfully loaded from custom module
               }
+            } catch (error) {
+              console.warn('[loadZohoConfig] Error loading from custom module:', error);
+              // Continue to fallback
             }
             
             // Priority 2: Fallback to widget variables
-            const config = await ZOHO.CRM.CONFIG.getVariables();
-            
-            if (config) {
-              console.log('✓ Loaded Zoho widget variables (fallback):', Object.keys(config));
-              
-              // Redirect URI (REQUIRED in production)
-              if (config.redirect_uri && config.redirect_uri.trim()) {
-                OAUTH_CONFIG.redirectUri = config.redirect_uri.trim();
-                console.log('✓ Using configured redirect URI:', OAUTH_CONFIG.redirectUri);
-              } else {
-                console.warn('⚠ No redirect URI configured - using auto-detection (may not work behind proxies)');
-                console.log('Current URL:', OAUTH_CONFIG.redirectUri);
+            try {
+              if (typeof ZOHO !== 'undefined' && ZOHO.CRM && ZOHO.CRM.CONFIG) {
+                const config = await ZOHO.CRM.CONFIG.getVariables();
+                
+                if (config) {
+                  console.log('✓ Loaded Zoho widget variables (fallback):', Object.keys(config));
+                  
+                  // Redirect URI (REQUIRED in production)
+                  if (config.redirect_uri && config.redirect_uri.trim()) {
+                    OAUTH_CONFIG.redirectUri = config.redirect_uri.trim();
+                    console.log('✓ Using configured redirect URI:', OAUTH_CONFIG.redirectUri);
+                  } else {
+                    console.warn('⚠ No redirect URI configured - using auto-detection (may not work behind proxies)');
+                    console.log('Current URL:', OAUTH_CONFIG.redirectUri);
+                  }
+                  
+                  // Client ID (can also come from URL params)
+                  if (config.client_id && config.client_id.trim()) {
+                    OAUTH_CONFIG.clientId = config.client_id.trim();
+                    console.log('✓ Client ID loaded from Zoho config');
+                  }
+                  
+                  // Environment (REQUIRED)
+                  if (config.environment === 'production') {
+                    OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
+                    OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
+                    OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
+                    console.log('✓ Using PRODUCTION environment');
+                  } else if (config.environment === 'sandbox') {
+                    // Already set to sandbox by default
+                    console.log('✓ Using SANDBOX environment');
+                  } else {
+                    console.warn('⚠ No environment configured - using sandbox (default)');
+                  }
+                } else {
+                  console.warn('⚠ No Zoho configuration found - using defaults (development mode)');
+                }
               }
-              
-              // Client ID (can also come from URL params)
-              if (config.client_id && config.client_id.trim()) {
-                OAUTH_CONFIG.clientId = config.client_id.trim();
-                console.log('✓ Client ID loaded from Zoho config');
-              }
-              
-              // Environment (REQUIRED)
-              if (config.environment === 'production') {
-                OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
-                OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
-                OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
-                console.log('✓ Using PRODUCTION environment');
-              } else if (config.environment === 'sandbox') {
-                // Already set to sandbox by default
-                console.log('✓ Using SANDBOX environment');
-              } else {
-                console.warn('⚠ No environment configured - using sandbox (default)');
-              }
-            } else {
-              console.warn('⚠ No Zoho configuration found - using defaults (development mode)');
+            } catch (error) {
+              console.warn('⚠ Could not load Zoho widget variables:', error.message);
             }
           } catch (error) {
             console.warn('⚠ Could not load Zoho config, using defaults (development mode):', error.message);
@@ -568,24 +633,120 @@
           }
 
           // Check existing token
-          const hasSession = await this.checkConnection();
+          try {
+            // Add timeout to prevent hanging
+            const checkPromise = this.checkConnection();
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('checkConnection timeout')), 5000)
+            );
+            
+            const hasSession = await Promise.race([checkPromise, timeoutPromise]);
+            if (!hasSession) {
+              // No session - checkConnection() should have already shown appropriate UI
+              // (disconnected status or account selection)
+              console.log('No session found, UI should be displayed by checkConnection()');
+            }
+          } catch (error) {
+            console.error('Error in checkConnection:', error);
+            // Fallback: show disconnected status on any error
+            console.log('⚠️ Falling back to showDisconnectedStatus() due to error or timeout');
+            this.showDisconnectedStatus();
+          }
         }
 
         async checkConnection() {
-          // Try to get existing session
-          const session = await this.getZohoSession();
-          const refreshToken = await this.getRefreshToken();
+          try {
+            // Try to get existing session
+            const session = await this.getZohoSession();
+            const refreshToken = await this.getRefreshToken();
           
           // Check if session exists and token is valid
           if (session && session.accessToken && !this.isTokenExpired(session.expiresAt)) {
-            // Valid session exists - check if tenant exists
+            // Valid session exists - check if credentials are configured
             console.log('✓ Valid session found');
-            const hasTenant = await this.checkTenantExists();
-            if (!hasTenant) {
-              // No tenant - show connected status with "Create new tenant" button instead of auto-showing wizard
-              this.showConnectedStatus(); // Will include the button
-              return false;
+            
+            // Check if credentials exist in custom module or widget variables
+            let credentialsExist = false;
+            try {
+              // In standalone mode, skip API calls that might hang
+              const isStandalone = window.self === window.top;
+              if (!isStandalone && window.SetupAPI && typeof window.SetupAPI.getCredentials === 'function') {
+                // Add timeout to prevent hanging (safety measure)
+                const credentialsPromise = window.SetupAPI.getCredentials();
+                const timeoutPromise = new Promise((_, reject) => 
+                  setTimeout(() => reject(new Error('Credentials check timeout')), 5000)
+                );
+                const credentials = await Promise.race([credentialsPromise, timeoutPromise]);
+                credentialsExist = !!(credentials && credentials.clientId);
+              } else if (isStandalone) {
+                // In standalone mode, check localStorage or URL params
+                const storedConfig = localStorage.getItem('sd_widget_setup_config');
+                if (storedConfig) {
+                  try {
+                    const config = JSON.parse(storedConfig);
+                    credentialsExist = !!(config && config.clientId);
+                  } catch (e) {
+                    // Ignore parse errors
+                  }
+                }
+                // Also check OAUTH_CONFIG (may be set from URL params)
+                if (!credentialsExist && OAUTH_CONFIG.clientId) {
+                  credentialsExist = true;
+                }
+              } else if (OAUTH_CONFIG.clientId) {
+                credentialsExist = true;
+              }
+            } catch (error) {
+              console.warn('[checkConnection] Error checking credentials:', error);
+              // Continue with credentialsExist = false
             }
+            
+            if (!credentialsExist) {
+              // No credentials configured - show account selection: create new or use existing
+              // Both options converge at setup modal
+              // BUT: In standalone mode with no credentials, just show disconnected status directly
+              const isStandalone = window.self === window.top;
+              if (isStandalone) {
+                // In standalone mode without credentials, show disconnected status directly
+                // (account selection requires credentials to be meaningful)
+                console.log('⚠️ Standalone mode: No credentials configured, showing disconnected status');
+                this.showDisconnectedStatus();
+                return false;
+              } else {
+                // In Zoho environment, show account selection
+                try {
+                  await this.showAccountSelection();
+                } catch (error) {
+                  console.error('[checkConnection] Error showing account selection:', error);
+                  // Fallback to disconnected status
+                  this.showDisconnectedStatus();
+                }
+                return false;
+              }
+            }
+            
+            // Credentials exist - check if tenant exists (only if not standalone to avoid API calls)
+            const isStandalone = window.self === window.top;
+            if (!isStandalone) {
+              try {
+                const hasTenant = await this.checkTenantExists();
+                if (!hasTenant) {
+                  // Credentials configured but no tenant - show account selection
+                  try {
+                    await this.showAccountSelection();
+                  } catch (error) {
+                    console.error('[checkConnection] Error showing account selection:', error);
+                    // Fallback to disconnected status
+                    this.showDisconnectedStatus();
+                  }
+                  return false;
+                }
+              } catch (error) {
+                console.warn('[checkConnection] Error checking tenant:', error);
+                // Continue - show connected status anyway
+              }
+            }
+            
             this.showConnectedStatus();
             return true;
           } else if (session && session.accessToken && this.isTokenExpired(session.expiresAt)) {
@@ -627,6 +788,13 @@
             }
           } else if (refreshToken) {
             // No session but have refresh token - try silent refresh
+            // BUT ONLY if clientId is configured
+            if (!OAUTH_CONFIG.clientId) {
+              console.log('⚠️ Refresh token exists but no Client ID configured - cannot refresh');
+              this.showDisconnectedStatus();
+              return false;
+            }
+            
             console.log('🔄 No session found, but refresh token exists - attempting refresh...');
             document.getElementById('app-content').innerHTML = `
               <div class="loading">
@@ -640,6 +808,12 @@
             console.log('⚠️ No session or refresh token found');
             
             // Show disconnected status with "Create new tenant" button
+            this.showDisconnectedStatus();
+            return false;
+          }
+          } catch (error) {
+            console.error('[checkConnection] Unexpected error:', error);
+            // Always show disconnected status as fallback
             this.showDisconnectedStatus();
             return false;
           }
@@ -741,6 +915,13 @@
         }
 
         async checkTenantExists() {
+          // In standalone mode, skip tenant check to avoid hanging
+          const isStandalone = window.self === window.top;
+          if (isStandalone) {
+            console.log('[checkTenantExists] Standalone mode - skipping tenant check');
+            return false; // Assume no tenant in standalone mode
+          }
+          
           try {
             const token = await this.getAccessToken();
             if (!token) return false;
@@ -750,12 +931,19 @@
               ? 'https://tenants-gateway-api-sbx.sidedrawersbx.com/api/v1/tenants/tenant/shared'
               : 'https://tenants-gateway-api.sidedrawer.com/api/v1/tenants/tenant/shared';
 
-            const response = await fetch(tenantApi, {
+            // Add timeout to prevent hanging
+            const fetchPromise = fetch(tenantApi, {
               headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
               }
             });
+            
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Tenant check timeout')), 5000)
+            );
+            
+            const response = await Promise.race([fetchPromise, timeoutPromise]);
 
             if (response.ok) {
               const tenants = await response.json();
@@ -781,12 +969,43 @@
           await this.setupModal.open(options);
         }
 
-        async showTenantCreationFlow() {
-          // Check permissions first
-          if (!this.hasManageOrgPermission) {
-            this.showError('Permission denied: Only users with "Manage Organization" rights can create tenants.');
+        async showAccountSelection() {
+          try {
+            if (!this.accountSelectionModal) {
+              if (typeof window.AccountSelectionModal !== 'undefined') {
+                this.accountSelectionModal = new window.AccountSelectionModal(this);
+                window.accountSelectionModal = this.accountSelectionModal;
+              } else {
+                console.error('[Account Selection] Modal class not available');
+                // Fallback: show disconnected status instead
+                this.showDisconnectedStatus();
+                return;
+              }
+            }
+            await this.accountSelectionModal.open();
+          } catch (error) {
+            console.error('[Account Selection] Error opening modal:', error);
+            // Fallback: show disconnected status on error
+            this.showDisconnectedStatus();
+          }
+        }
+
+        async showTenantCreationWizard() {
+          // Directly show tenant creation wizard (for logged-in users)
+          const session = await this.getZohoSession();
+          const token = await this.getAccessToken();
+          
+          if (!session || !token) {
+            this.showError('You must be logged in to create a tenant.');
             return;
           }
+          
+          // Use existing tenant creation flow
+          await this.showTenantCreationFlowDirect();
+        }
+
+        async showTenantCreationFlowDirect() {
+          // Direct tenant creation wizard (bypasses account selection)
           const session = await this.getZohoSession();
           const token = await this.getAccessToken();
           
@@ -810,59 +1029,66 @@
             appContent.style.display = 'none';
           }
           
-          // Determine which wizard to use based on auth state
+          // Show wizard container
+          wizardContainer.style.display = 'block';
+          
+          // Initialize tenant wizard with credentials
+          if (typeof window.tenantWizardWithCredentials !== 'undefined' && window.tenantWizardWithCredentials) {
+            try {
+              await window.tenantWizardWithCredentials.init(token);
+              return;
+            } catch (error) {
+              const dict = window.tenantWizardWithCredentials?.state?.dictionary || {};
+              this.showError(dict.globalparams_error || 'Failed to initialize tenant creation wizard: ' + error.message);
+              return;
+            }
+          }
+          
+          this.showError('Tenant creation wizard is not available. Please refresh the page.');
+        }
+
+        async showTenantCreationFlow() {
+          // Check if we're in standalone mode (local development)
+          const isStandalone = window.self === window.top;
+          
+          // Check permissions first (bypass in standalone mode)
+          if (!isStandalone && !this.hasManageOrgPermission) {
+            this.showError('Permission denied: Only users with "Manage Organization" rights can create tenants.');
+            return;
+          }
+          
+          if (isStandalone) {
+            console.log('✓ Standalone mode - bypassing permission check for tenant creation');
+          }
+          
+          const session = await this.getZohoSession();
+          const token = await this.getAccessToken();
+          
+          // If logged in, show account selection modal
+          // If not logged in, show tenant creation wizard directly
           if (session && token) {
-            // Logged-in user - use credentials wizard
-            let attempts = 0;
-            const maxAttempts = 50;
-            
-            while (attempts < maxAttempts) {
-              if (typeof window.tenantWizardWithCredentials !== 'undefined' && window.tenantWizardWithCredentials) {
-                try {
-                  await window.tenantWizardWithCredentials.init(token);
-                  return;
-                } catch (error) {
-                  const dict = window.tenantWizardWithCredentials?.state?.dictionary || {};
-                  this.showError(dict.globalparams_error || 'Failed to initialize tenant creation wizard: ' + error.message);
-                  return;
-                }
-              }
-              await new Promise(resolve => setTimeout(resolve, 100));
-              attempts++;
-            }
-            
-            this.showError('Tenant creation wizard for logged-in users is not available. Please refresh the page.');
+            // Logged in - show account selection (both options converge at setup modal)
+            await this.showAccountSelection();
           } else {
-            // Non-logged-in user - use existing wizard
-            let attempts = 0;
-            const maxAttempts = 50;
-            
-            while (attempts < maxAttempts) {
-              if (typeof window.tenantWizard !== 'undefined' && window.tenantWizard) {
-                try {
-                  await window.tenantWizard.init();
-                  return;
-                } catch (error) {
-                  const dict = window.tenantWizard?.state?.dictionary || {};
-                  this.showError(dict.globalparams_error || 'Failed to initialize tenant creation wizard: ' + error.message);
-                  return;
-                }
-              }
-              await new Promise(resolve => setTimeout(resolve, 100));
-              attempts++;
-            }
-            
-            this.showError('Tenant creation wizard is not available. Please refresh the page.');
+            // Not logged in - show tenant creation wizard directly
+            // After tenant creation, setup modal will open (converges)
+            await this.showTenantCreationFlowDirect();
           }
         }
 
         async startOAuthFlow() {
           try {
+            // Check if we're in standalone mode (local development)
+            const isStandalone = window.self === window.top;
+            
             // Validate configuration
             if (!OAUTH_CONFIG.clientId) {
-              // If no OAuth config, check if user is admin
-              if (this.hasManageOrgPermission) {
-                // Admin can create tenant to set up credentials
+              // If no OAuth config, check if user is admin OR in standalone mode
+              if (isStandalone || this.hasManageOrgPermission) {
+                // Admin or standalone mode can create tenant to set up credentials
+                if (isStandalone) {
+                  console.log('✓ Standalone mode - allowing tenant creation for testing');
+                }
                 await this.showTenantCreationFlow();
               } else {
                 // Non-admin users need admin to configure credentials first
@@ -1022,6 +1248,13 @@
         }
 
         async refreshAccessToken() {
+          // Validate clientId is configured before attempting refresh
+          if (!OAUTH_CONFIG.clientId) {
+            console.error('❌ Cannot refresh token: Client ID not configured');
+            this.showDisconnectedStatus();
+            return;
+          }
+          
           const refreshToken = await this.getRefreshToken();
           
           if (!refreshToken) {
@@ -1043,13 +1276,19 @@
                   scope: OAUTH_CONFIG.scope  // CRITICAL: Include scope to get new refresh token with rotation enabled
                 };
                 
-                const response = await fetch(OAUTH_CONFIG.tokenEndpoint, {
+                const fetchPromise = fetch(OAUTH_CONFIG.tokenEndpoint, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json'
                   },
                   body: JSON.stringify(refreshRequestBody)
                 });
+                
+                const timeoutPromise = new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error('Token refresh timeout')), 10000)
+                );
+                
+                const response = await Promise.race([fetchPromise, timeoutPromise]);
 
                 if (!response.ok) {
                   const errorText = await response.text();
@@ -1095,13 +1334,19 @@
               scope: OAUTH_CONFIG.scope  // CRITICAL: Include scope to get new refresh token with rotation enabled
             };
             
-            const response = await fetch(OAUTH_CONFIG.tokenEndpoint, {
+            const fetchPromise = fetch(OAUTH_CONFIG.tokenEndpoint, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify(refreshRequestBody)
             });
+            
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Token refresh timeout')), 10000)
+            );
+            
+            const response = await Promise.race([fetchPromise, timeoutPromise]);
 
             if (!response.ok) {
               const errorText = await response.text();
