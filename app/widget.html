@@ -1933,15 +1933,15 @@
           const auth = new SideDrawerAuth();
           window.auth = auth; // Make globally accessible
           
-          // Initialize the widget
-          auth.init();
+          // Note: init() is called from initZoho() after SDK initialization completes
+          // Do NOT call auth.init() here - it would run before SDK is ready
         } catch (error) {
           console.error('❌ Error during widget initialization:', error);
           // Try to initialize anyway - some features might still work
           try {
             const auth = new SideDrawerAuth();
             window.auth = auth;
-            auth.init();
+            // Note: init() is called from initZoho() after SDK initialization completes
           } catch (fallbackError) {
             console.error('❌ Fallback initialization also failed:', fallbackError);
           }
