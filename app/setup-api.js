@@ -51,7 +51,7 @@ async function checkUserHasManageOrgPermission() {
   console.log('[Setup API] Not in standalone mode - proceeding with Zoho permission check');
   
   try {
-    // Wait for Zoho SDK to be available and initialized
+    // Wait for Zoho SDK to be available
     console.log('[Setup API] Checking Zoho SDK availability...');
     console.log('[Setup API] ZOHO object exists:', typeof ZOHO !== 'undefined');
     
@@ -68,9 +68,31 @@ async function checkUserHasManageOrgPermission() {
       return false;
     }
     
-    console.log('[Setup API] ZOHO SDK found, checking initialization...');
+    console.log('[Setup API] ZOHO SDK found, initializing...');
     
-    // Wait for ZOHO.CRM.CONFIG to be available (SDK needs time to initialize)
+    // Initialize Zoho SDK if not already initialized
+    if (ZOHO.embeddedApp && typeof ZOHO.embeddedApp.init === 'function') {
+      try {
+        console.log('[Setup API] Calling ZOHO.embeddedApp.init()...');
+        await Promise.race([
+          ZOHO.embeddedApp.init(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Init timeout')), 5000))
+        ]);
+        console.log('[Setup API] ZOHO.embeddedApp.init() completed successfully');
+      } catch (initError) {
+        // Check if already initialized (some SDKs throw error if already initialized)
+        if (initError.message.includes('timeout') || initError.message.includes('already')) {
+          console.warn('[Setup API] Zoho SDK init timeout or already initialized:', initError.message);
+        } else {
+          console.warn('[Setup API] Zoho SDK init failed:', initError.message);
+          // Continue anyway - might still work
+        }
+      }
+    } else {
+      console.log('[Setup API] ZOHO.embeddedApp.init not available - SDK may already be initialized');
+    }
+    
+    // Wait for ZOHO.CRM.CONFIG to be available after initialization
     attempts = 0;
     while ((!ZOHO?.CRM?.CONFIG?.getCurrentUser) && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -82,7 +104,7 @@ async function checkUserHasManageOrgPermission() {
     console.log('[Setup API] getCurrentUser function exists:', typeof ZOHO?.CRM?.CONFIG?.getCurrentUser === 'function');
     
     if (!ZOHO?.CRM?.CONFIG?.getCurrentUser) {
-      console.error('[Setup API] getCurrentUser function not available after waiting');
+      console.error('[Setup API] getCurrentUser function not available after initialization');
       return false;
     }
     
