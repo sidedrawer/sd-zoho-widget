@@ -359,8 +359,12 @@
               window.accountSelectionModal = this.accountSelectionModal; // Make globally accessible
             }
             
-            // Initialize after Zoho setup (or fallback)
+            // Load Zoho config and check permissions BEFORE initializing UI
+            await this.loadZohoConfig();
+            
+            // Initialize after Zoho setup and permission check complete
             console.log('Proceeding with initialization (Zoho initialized:', this.zohoInitialized, ')');
+            console.log('Permission status:', this.hasManageOrgPermission ? 'Admin' : 'Standard User');
             console.log('OAuth Redirect URI:', OAUTH_CONFIG.redirectUri);
             this.init();
           } catch (error) {
@@ -408,11 +412,17 @@
             // Check user permissions in Zoho environment
             try {
               if (window.SetupAPI && typeof window.SetupAPI.checkUserHasManageOrgPermission === 'function') {
+                console.log('[loadZohoConfig] Checking user permissions...');
                 this.hasManageOrgPermission = await window.SetupAPI.checkUserHasManageOrgPermission();
-                console.log('✓ Permission check:', this.hasManageOrgPermission ? 'Admin (can configure)' : 'Standard User (read-only)');
+                console.log('✓ Permission check result:', this.hasManageOrgPermission ? 'Admin (can configure)' : 'Standard User (read-only)');
+                console.log('✓ Permission stored in this.hasManageOrgPermission:', this.hasManageOrgPermission);
+              } else {
+                console.warn('⚠️ SetupAPI.checkUserHasManageOrgPermission not available');
+                this.hasManageOrgPermission = false;
               }
             } catch (error) {
-              console.warn('[loadZohoConfig] Error checking permissions:', error);
+              console.error('[loadZohoConfig] Error checking permissions:', error);
+              console.error('Error details:', error.stack);
               this.hasManageOrgPermission = false; // Default to false for security
             }
             
@@ -1975,6 +1985,38 @@
       };
       
       console.log('💡 Run checkSideDrawerSession() in console to check session status');
+      
+      // Helper function to check and fix permission status
+      window.checkSideDrawerPermissions = async function() {
+        console.log('🔍 Checking SideDrawer Permission Status...');
+        console.log('='.repeat(60));
+        console.log('Stored hasManageOrgPermission:', auth.hasManageOrgPermission);
+        console.log('isStandalone:', window.self === window.top);
+        
+        if (window.SetupAPI && typeof window.SetupAPI.checkUserHasManageOrgPermission === 'function') {
+          try {
+            const hasPermission = await window.SetupAPI.checkUserHasManageOrgPermission();
+            console.log('Current permission check result:', hasPermission);
+            console.log('Permission matches stored value:', hasPermission === auth.hasManageOrgPermission);
+            
+            if (hasPermission && !auth.hasManageOrgPermission) {
+              console.warn('⚠️ MISMATCH: User has permissions but widget thinks they don\'t!');
+              console.warn('⚠️ Updating hasManageOrgPermission to true...');
+              auth.hasManageOrgPermission = true;
+              console.log('✓ Updated. Re-rendering UI...');
+              auth.showDisconnectedStatus(); // Re-render with buttons
+            }
+          } catch (error) {
+            console.error('Error checking permissions:', error);
+          }
+        } else {
+          console.warn('SetupAPI.checkUserHasManageOrgPermission not available');
+        }
+        
+        console.log('='.repeat(60));
+      };
+      
+      console.log('💡 Run checkSideDrawerPermissions() in console to check and fix permission status');
       
       // Ensure reset functions are available on DOM ready (final fallback)
       if (document.readyState === 'loading') {
