@@ -355,6 +355,44 @@ async function getCredentials() {
   return null;
 }
 
+/**
+ * Delete setup configuration from custom module
+ * Requires admin permissions
+ * @returns {Promise<boolean>} True if deleted successfully
+ */
+async function deleteSetupConfig() {
+  // Check if we're in standalone mode
+  const isStandalone = isStandaloneMode();
+  if (isStandalone) {
+    // In standalone mode, clear localStorage
+    localStorage.removeItem('sd_widget_setup_config');
+    console.log('[Setup API] Cleared localStorage config (standalone mode)');
+    return true;
+  }
+  
+  // Check permissions (in Zoho environment)
+  const hasPermission = await checkUserHasManageOrgPermission();
+  if (!hasPermission) {
+    throw new Error('Permission denied: Only users with "Manage Organization" rights can delete credentials.');
+  }
+  
+  try {
+    const existingConfig = await getSetupConfig();
+    if (existingConfig && existingConfig.id) {
+      await ZOHO.CRM.API.deleteRecord({
+        Entity: SETUP_MODULE_NAME,
+        RecordID: existingConfig.id
+      });
+      console.log('[Setup API] Deleted setup record:', existingConfig.id);
+      return true;
+    }
+    return false; // No record to delete
+  } catch (error) {
+    console.error('[Setup API] Error deleting setup config:', error);
+    throw error;
+  }
+}
+
 // Export functions for use in other modules
 if (typeof window !== 'undefined') {
   window.SetupAPI = {
@@ -362,6 +400,7 @@ if (typeof window !== 'undefined') {
     checkSetupModuleExists,
     getSetupConfig,
     saveSetupConfig,
-    getCredentials
+    getCredentials,
+    deleteSetupConfig
   };
 }

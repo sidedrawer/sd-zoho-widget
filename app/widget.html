@@ -884,9 +884,12 @@
             </div>
 
             <button class="btn btn-success" onclick="auth.startOAuthFlow()">Connect to SideDrawer</button>
-            ${this.hasManageOrgPermission ? `
+            ${this.hasManageOrgPermission || window.self === window.top ? `
               <button class="btn btn-outline mt-10" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
               <button class="btn btn-outline mt-10" onclick="auth.showSetupModal()">⚙️ Setup</button>
+              <button class="btn btn-outline mt-10" onclick="auth.resetConfiguration()" style="color: #dc3545;">
+                🔄 Reset Configuration
+              </button>
             ` : ''}
           `;
         }
@@ -1492,6 +1495,86 @@
           // Redirect to Auth0 logout, which will then redirect back to our app
           window.location.href = auth0LogoutUrl;
         }
+
+        async resetConfiguration() {
+          try {
+            // Clear OAuth session (but don't redirect to Auth0 logout - we'll reload instead)
+            console.log('🔄 Resetting SideDrawer configuration...');
+            
+            // Show loading state
+            const appContent = document.getElementById('app-content');
+            if (appContent) {
+              appContent.innerHTML = `
+                <div class="loading">
+                  <div class="spinner"></div>
+                  <p>Resetting configuration...</p>
+                </div>
+              `;
+            }
+            
+            // Clear periodic refresh interval
+            if (this.refreshInterval) {
+              clearInterval(this.refreshInterval);
+              this.refreshInterval = null;
+            }
+            
+            // Clear Zoho session
+            await this.clearZohoSession();
+            
+            // Clear setup config from custom module (if admin)
+            if (window.SetupAPI && typeof window.SetupAPI.deleteSetupConfig === 'function') {
+              try {
+                await window.SetupAPI.deleteSetupConfig();
+                console.log('✓ Configuration reset: Custom module cleared');
+              } catch (error) {
+                if (error.message.includes('Permission denied')) {
+                  console.warn('⚠️ Cannot delete custom module (permission denied) - delete manually in Zoho');
+                } else {
+                  console.warn('⚠️ Error deleting custom module:', error);
+                }
+              }
+            }
+            
+            // Clear localStorage
+            localStorage.removeItem('sd_widget_setup_config');
+            localStorage.removeItem('sdSession');
+            localStorage.removeItem('sidedrawer_refresh_token');
+            localStorage.removeItem('sidedrawer_code_verifier');
+            
+            // Clear all localStorage items related to SideDrawer and Auth0
+            Object.keys(localStorage).forEach(key => {
+              if (key.includes('sidedrawer') || key.includes('auth0') || key.includes('@@') || key.includes('_legacy')) {
+                localStorage.removeItem(key);
+              }
+            });
+            
+            // Clear sessionStorage
+            Object.keys(sessionStorage).forEach(key => {
+              if (key.startsWith('sd_config_')) {
+                sessionStorage.removeItem(key);
+              }
+            });
+            
+            // Clear code verifier from sessionStorage
+            sessionStorage.removeItem('sidedrawer_code_verifier');
+            
+            // Reset OAUTH_CONFIG
+            OAUTH_CONFIG.clientId = null;
+            
+            // Clear all Auth0 cookies
+            this.clearAllCookies();
+            
+            console.log('✅ Configuration reset complete');
+            
+            // Reload to show fresh state
+            window.location.reload();
+          } catch (error) {
+            console.error('Error resetting configuration:', error);
+            this.showError('Failed to reset configuration: ' + error.message);
+            // Still reload to show disconnected state
+            setTimeout(() => window.location.reload(), 2000);
+          }
+        }
         
         clearAllCookies() {
           // Get all cookies
@@ -1663,6 +1746,52 @@
 
       // Tenant Creation Wizard, StripeService, and TenantCreationWizard classes are in tenant-wizard.js
       const auth = new SideDrawerAuth();
+      window.auth = auth; // Make globally accessible
+      
+      // Helper function to reset configuration from console
+      window.resetSideDrawerConfig = async function() {
+        if (!window.auth) {
+          console.error('❌ Auth instance not available. Please refresh the page.');
+          return;
+        }
+        if (confirm('Are you sure you want to reset all SideDrawer configuration? This will clear credentials and sessions.')) {
+          await window.auth.resetConfiguration();
+        }
+      };
+      
+      // Fallback reset function (works even if auth not initialized)
+      window.resetSideDrawerConfigSimple = function() {
+        if (confirm('Reset all SideDrawer configuration? This will clear all stored data.')) {
+          // Clear localStorage
+          localStorage.removeItem('sd_widget_setup_config');
+          localStorage.removeItem('sdSession');
+          localStorage.removeItem('sidedrawer_refresh_token');
+          localStorage.removeItem('sidedrawer_code_verifier');
+          
+          // Clear all localStorage items related to SideDrawer and Auth0
+          Object.keys(localStorage).forEach(key => {
+            if (key.includes('sidedrawer') || key.includes('auth0') || key.includes('@@') || key.includes('_legacy')) {
+              localStorage.removeItem(key);
+            }
+          });
+          
+          // Clear sessionStorage
+          Object.keys(sessionStorage).forEach(key => {
+            if (key.startsWith('sd_config_')) {
+              sessionStorage.removeItem(key);
+            }
+          });
+          
+          // Clear code verifier from sessionStorage
+          sessionStorage.removeItem('sidedrawer_code_verifier');
+          
+          console.log('✅ Local storage cleared. Refreshing page...');
+          window.location.reload();
+        }
+      };
+      
+      console.log('💡 Run resetSideDrawerConfig() in console to reset all configuration');
+      console.log('💡 Run resetSideDrawerConfigSimple() for quick reset without auth instance');
       
       // Helper function to check session status (can be called from console)
       window.checkSideDrawerSession = async function() {
