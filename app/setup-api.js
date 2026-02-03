@@ -52,16 +52,34 @@ async function checkUserHasManageOrgPermission() {
   
   try {
     console.log('[Setup API] Calling ZOHO.CRM.CONFIG.getCurrentUser()...');
+    console.log('[Setup API] ZOHO object exists:', typeof ZOHO !== 'undefined');
+    console.log('[Setup API] ZOHO.CRM exists:', typeof ZOHO?.CRM !== 'undefined');
+    console.log('[Setup API] ZOHO.CRM.CONFIG exists:', typeof ZOHO?.CRM?.CONFIG !== 'undefined');
+    console.log('[Setup API] getCurrentUser function exists:', typeof ZOHO?.CRM?.CONFIG?.getCurrentUser === 'function');
+    
     const user = await ZOHO.CRM.CONFIG.getCurrentUser();
+    console.log('[Setup API] getCurrentUser() promise resolved');
     console.log('[Setup API] getCurrentUser() returned:', user);
+    console.log('[Setup API] user type:', typeof user);
+    console.log('[Setup API] user is null:', user === null);
+    console.log('[Setup API] user is undefined:', user === undefined);
     console.log('[Setup API] user?.users:', user?.users);
+    console.log('[Setup API] user?.users type:', typeof user?.users);
+    console.log('[Setup API] user?.users is array:', Array.isArray(user?.users));
+    console.log('[Setup API] user?.users length:', user?.users?.length);
+    
     const userData = user?.users?.[0];
     console.log('[Setup API] Extracted userData:', userData);
+    console.log('[Setup API] userData is null:', userData === null);
+    console.log('[Setup API] userData is undefined:', userData === undefined);
     
     if (!userData) {
       console.warn('[Setup API] No user data found - user object:', user);
+      console.warn('[Setup API] Returning false due to missing userData');
       return false;
     }
+    
+    console.log('[Setup API] UserData found, proceeding with permission check');
     
     // Log ALL user data for debugging
     console.log('[Setup API] Full user data:', JSON.stringify(userData, null, 2));
@@ -125,9 +143,14 @@ async function checkUserHasManageOrgPermission() {
     }
     
     console.log('[Setup API] Permission check - Role:', role, 'Profile:', profile, 'Is Admin:', isAdmin);
+    console.log('[Setup API] Returning isAdmin value:', isAdmin);
     return isAdmin;
   } catch (error) {
-    console.warn('[Setup API] Could not verify permissions:', error);
+    console.error('[Setup API] ERROR in checkUserHasManageOrgPermission:', error);
+    console.error('[Setup API] Error name:', error?.name);
+    console.error('[Setup API] Error message:', error?.message);
+    console.error('[Setup API] Error stack:', error?.stack);
+    console.warn('[Setup API] Could not verify permissions, returning false:', error);
     return false; // Default to false for security
   }
 }
