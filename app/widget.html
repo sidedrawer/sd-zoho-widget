@@ -132,8 +132,7 @@
       console.log('📅 Build Date:', BUILD_DATE);
       console.log('🔗 Loaded from:', window.location.href);
 
-      // Check if version parameter matches
-      const urlParams = new URLSearchParams(window.location.search);
+      // Check if version parameter matches (reuse existing urlParams)
       const urlVersion = urlParams.get('v');
       if (urlVersion && urlVersion !== WIDGET_VERSION) {
         console.warn('⚠️ Version mismatch! URL version:', urlVersion, 'Widget version:', WIDGET_VERSION);
