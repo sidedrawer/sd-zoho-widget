@@ -51,12 +51,42 @@ async function checkUserHasManageOrgPermission() {
   console.log('[Setup API] Not in standalone mode - proceeding with Zoho permission check');
   
   try {
-    console.log('[Setup API] Calling ZOHO.CRM.CONFIG.getCurrentUser()...');
+    // Wait for Zoho SDK to be available and initialized
+    console.log('[Setup API] Checking Zoho SDK availability...');
     console.log('[Setup API] ZOHO object exists:', typeof ZOHO !== 'undefined');
+    
+    // Wait up to 5 seconds for ZOHO SDK to be available
+    let attempts = 0;
+    const maxAttempts = 50; // 50 attempts * 100ms = 5 seconds
+    while (typeof ZOHO === 'undefined' && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
+    
+    if (typeof ZOHO === 'undefined') {
+      console.warn('[Setup API] ZOHO SDK not loaded after waiting');
+      return false;
+    }
+    
+    console.log('[Setup API] ZOHO SDK found, checking initialization...');
+    
+    // Wait for ZOHO.CRM.CONFIG to be available (SDK needs time to initialize)
+    attempts = 0;
+    while ((!ZOHO?.CRM?.CONFIG?.getCurrentUser) && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
+    
     console.log('[Setup API] ZOHO.CRM exists:', typeof ZOHO?.CRM !== 'undefined');
     console.log('[Setup API] ZOHO.CRM.CONFIG exists:', typeof ZOHO?.CRM?.CONFIG !== 'undefined');
     console.log('[Setup API] getCurrentUser function exists:', typeof ZOHO?.CRM?.CONFIG?.getCurrentUser === 'function');
     
+    if (!ZOHO?.CRM?.CONFIG?.getCurrentUser) {
+      console.error('[Setup API] getCurrentUser function not available after waiting');
+      return false;
+    }
+    
+    console.log('[Setup API] Calling ZOHO.CRM.CONFIG.getCurrentUser()...');
     const user = await ZOHO.CRM.CONFIG.getCurrentUser();
     console.log('[Setup API] getCurrentUser() promise resolved');
     console.log('[Setup API] getCurrentUser() returned:', user);
