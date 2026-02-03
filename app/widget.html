@@ -14,6 +14,10 @@
     <script src="tenant-wizard.js"></script>
     <!-- Tenant Creation Wizard (logged-in) -->
     <script src="tenant-wizard-with-credentials.js"></script>
+    <!-- Setup API for credential management -->
+    <script src="setup-api.js"></script>
+    <!-- Setup Modal Component -->
+    <script src="setup-modal.js"></script>
   </head>
   <body>
     <div class="container">
@@ -91,6 +95,8 @@
         constructor() {
           this.zohoInitialized = false;
           this.refreshInterval = null;
+          this.hasManageOrgPermission = false; // Store permission status
+          this.setupModal = null; // Setup modal instance
           this.initZoho();
         }
 
@@ -273,6 +279,12 @@
               }
             });
 
+            // Initialize setup modal
+            if (typeof window.SetupModal !== 'undefined') {
+              this.setupModal = new window.SetupModal(this);
+              window.setupModal = this.setupModal; // Make globally accessible
+            }
+            
             // Initialize after Zoho setup (or fallback)
             console.log('Proceeding with initialization (Zoho initialized:', this.zohoInitialized, ')');
             console.log('OAuth Redirect URI:', OAUTH_CONFIG.redirectUri);
@@ -284,11 +296,50 @@
 
         async loadZohoConfig() {
           try {
-            // Get widget variables from Zoho CRM
+            // Check user permissions first
+            if (window.SetupAPI && typeof window.SetupAPI.checkUserHasManageOrgPermission === 'function') {
+              this.hasManageOrgPermission = await window.SetupAPI.checkUserHasManageOrgPermission();
+              console.log('✓ Permission check:', this.hasManageOrgPermission ? 'Admin (can configure)' : 'Standard User (read-only)');
+            }
+            
+            // Priority 1: Try custom module first (via SetupAPI)
+            if (window.SetupAPI && typeof window.SetupAPI.getCredentials === 'function') {
+              const credentials = await window.SetupAPI.getCredentials();
+              
+              if (credentials && credentials.clientId) {
+                console.log('✓ Loaded credentials from:', credentials.source);
+                
+                // Set OAuth config from custom module
+                OAUTH_CONFIG.clientId = credentials.clientId;
+                
+                if (credentials.redirectUri) {
+                  OAUTH_CONFIG.redirectUri = credentials.redirectUri;
+                  console.log('✓ Using redirect URI from custom module:', OAUTH_CONFIG.redirectUri);
+                }
+                
+                // Set environment endpoints
+                if (credentials.environment === 'production') {
+                  OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
+                  OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
+                  OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
+                  console.log('✓ Using PRODUCTION environment');
+                } else {
+                  // Sandbox (default)
+                  OAUTH_CONFIG.authorizationEndpoint = 'https://auth-sbx.sidedrawersbx.com/authorize';
+                  OAUTH_CONFIG.tokenEndpoint = 'https://auth-sbx.sidedrawersbx.com/oauth/token';
+                  OAUTH_CONFIG.audience = 'https://user-api-sbx.sidedrawersbx.com';
+                  console.log('✓ Using SANDBOX environment');
+                }
+                
+                return; // Successfully loaded from custom module
+              }
+            }
+            
+            // Priority 2: Fallback to widget variables
             const config = await ZOHO.CRM.CONFIG.getVariables();
             
             if (config) {
-              console.log('✓ Loaded Zoho widget variables:', Object.keys(config));
+              console.log('✓ Loaded Zoho widget variables (fallback):', Object.keys(config));
               
               // Redirect URI (REQUIRED in production)
               if (config.redirect_uri && config.redirect_uri.trim()) {
@@ -299,11 +350,11 @@
                 console.log('Current URL:', OAUTH_CONFIG.redirectUri);
               }
               
-                // Client ID (can also come from URL params)
-                if (config.client_id && config.client_id.trim()) {
-                  OAUTH_CONFIG.clientId = config.client_id.trim();
-                  console.log('✓ Client ID loaded from Zoho config');
-                }
+              // Client ID (can also come from URL params)
+              if (config.client_id && config.client_id.trim()) {
+                OAUTH_CONFIG.clientId = config.client_id.trim();
+                console.log('✓ Client ID loaded from Zoho config');
+              }
               
               // Environment (REQUIRED)
               if (config.environment === 'production') {
@@ -626,7 +677,10 @@
             <div class="button-group">
               <button class="btn" onclick="auth.disconnect()">Disconnect</button>
               <button class="btn btn-success" onclick="auth.testConnection()">Test Connection</button>
-              <button class="btn btn-primary" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
+              ${this.hasManageOrgPermission ? `
+                <button class="btn btn-primary" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
+                <button class="btn btn-outline" onclick="auth.showSetupModal()">⚙️ Setup</button>
+              ` : ''}
             </div>
 
             <div id="test-result"></div>
@@ -656,7 +710,10 @@
             </div>
 
             <button class="btn btn-success" onclick="auth.startOAuthFlow()">Connect to SideDrawer</button>
-            <button class="btn btn-outline mt-10" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
+            ${this.hasManageOrgPermission ? `
+              <button class="btn btn-outline mt-10" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
+              <button class="btn btn-outline mt-10" onclick="auth.showSetupModal()">⚙️ Setup</button>
+            ` : ''}
           `;
         }
 
@@ -711,7 +768,25 @@
           }
         }
 
+        async showSetupModal(options = {}) {
+          if (!this.setupModal) {
+            if (typeof window.SetupModal !== 'undefined') {
+              this.setupModal = new window.SetupModal(this);
+              window.setupModal = this.setupModal;
+            } else {
+              this.showError('Setup modal is not available. Please refresh the page.');
+              return;
+            }
+          }
+          await this.setupModal.open(options);
+        }
+
         async showTenantCreationFlow() {
+          // Check permissions first
+          if (!this.hasManageOrgPermission) {
+            this.showError('Permission denied: Only users with "Manage Organization" rights can create tenants.');
+            return;
+          }
           const session = await this.getZohoSession();
           const token = await this.getAccessToken();
           
@@ -1057,6 +1132,8 @@
             console.error('Error details:', error.stack);
             // Show disconnect option since refresh token is likely invalid
             this.showError(`Failed to refresh session: ${error.message}`, true);
+            // CRITICAL: Re-throw error so caller knows refresh failed
+            throw error;
           }
         }
 

@@ -1653,7 +1653,7 @@ class TenantCreationWizardWithCredentials {
 
       // All steps completed successfully
       this.state.loading = false;
-      this.showSuccess();
+      this.showSuccess(tenant);
     } catch (error) {
       console.error('❌ Error in tenant creation flow:', error);
       this.state.loading = false;
@@ -1706,7 +1706,7 @@ class TenantCreationWizardWithCredentials {
     return 'users'; // default
   }
 
-  showSuccess() {
+  async showSuccess(tenant = null) {
     const wizardContainer = document.getElementById('tenant-wizard');
     wizardContainer.innerHTML = `
       <div class="tenant-wizard">
@@ -1716,12 +1716,71 @@ class TenantCreationWizardWithCredentials {
           <p class="success-text">
             Your SideDrawer account has been created.
           </p>
-          <button class="btn btn-success mt-24" onclick="location.reload()">
+          <button class="btn btn-success mt-24" id="wizard-continue-btn">
             Continue
           </button>
         </div>
       </div>
     `;
+
+    // Check if credentials need to be configured
+    // Only show setup modal if:
+    // 1. User has admin permissions
+    // 2. Credentials don't exist in custom module
+    // 3. Tenant was created successfully
+    if (tenant && tenant.id) {
+      try {
+        // Check permissions
+        let hasPermission = false;
+        if (window.SetupAPI && typeof window.SetupAPI.checkUserHasManageOrgPermission === 'function') {
+          hasPermission = await window.SetupAPI.checkUserHasManageOrgPermission();
+        }
+
+        if (hasPermission) {
+          // Check if credentials exist
+          let existingConfig = null;
+          if (window.SetupAPI && typeof window.SetupAPI.getSetupConfig === 'function') {
+            existingConfig = await window.SetupAPI.getSetupConfig();
+          }
+
+          // If no credentials, open setup modal with tenant ID pre-filled
+          if (!existingConfig || !existingConfig.clientId) {
+            console.log('[Tenant Wizard] No credentials found, opening setup modal with tenant ID:', tenant.id);
+            
+            // Wait a moment for UI to render, then open modal
+            setTimeout(async () => {
+              if (window.setupModal && typeof window.setupModal.open === 'function') {
+                await window.setupModal.open({ preFillTenantId: tenant.id });
+              } else if (window.auth && typeof window.auth.showSetupModal === 'function') {
+                await window.auth.showSetupModal({ preFillTenantId: tenant.id });
+              } else {
+                console.warn('[Tenant Wizard] Setup modal not available');
+              }
+            }, 500);
+            
+            // Update continue button to reload after setup
+            const continueBtn = document.getElementById('wizard-continue-btn');
+            if (continueBtn) {
+              continueBtn.textContent = 'Continue (after setup)';
+              continueBtn.onclick = () => {
+                window.location.reload();
+              };
+            }
+            return; // Don't show regular continue button yet
+          }
+        }
+      } catch (error) {
+        console.error('[Tenant Wizard] Error checking credentials:', error);
+      }
+    }
+
+    // Regular continue button (credentials already exist or user doesn't have permissions)
+    const continueBtn = document.getElementById('wizard-continue-btn');
+    if (continueBtn) {
+      continueBtn.onclick = () => {
+        window.location.reload();
+      };
+    }
   }
 
   // Helper methods

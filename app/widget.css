@@ -1261,3 +1261,91 @@ body {
   font-size: 14px;
 }
 
+/* Setup Modal Styles */
+.setup-modal {
+  max-width: 600px;
+  width: 90%;
+}
+
+.setup-modal .form-group {
+  margin-bottom: 20px;
+}
+
+.setup-modal label {
+  display: block;
+  margin-bottom: 8px;
+  color: #374151;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.setup-modal .required {
+  color: #dc2626;
+}
+
+.setup-modal .optional {
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.setup-modal input[type="text"],
+.setup-modal input[type="url"],
+.setup-modal select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 15px;
+  transition: border-color 0.2s;
+}
+
+.setup-modal input[type="text"]:focus,
+.setup-modal input[type="url"]:focus,
+.setup-modal select:focus {
+  outline: none;
+  border-color: #ff6b35;
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
+}
+
+.setup-modal .form-help {
+  display: block;
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.setup-modal .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.setup-modal .btn-outline {
+  background: white;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.setup-modal .btn-outline:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.setup-modal .btn-primary {
+  background: #ff6b35;
+  color: white;
+  border: 1px solid #ff6b35;
+}
+
+.setup-modal .btn-primary:hover {
+  background: #ff7a28;
+  border-color: #ff7a28;
+}
+
+.setup-modal .btn-primary:disabled {
+  background: #9ca3af;
+  border-color: #9ca3af;
+  cursor: not-allowed;
+}
