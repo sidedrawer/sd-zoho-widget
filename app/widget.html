@@ -860,8 +860,14 @@
           try {
             // Validate configuration
             if (!OAUTH_CONFIG.clientId) {
-              // If no OAuth config, show tenant creation flow directly
-              await this.showTenantCreationFlow();
+              // If no OAuth config, check if user is admin
+              if (this.hasManageOrgPermission) {
+                // Admin can create tenant to set up credentials
+                await this.showTenantCreationFlow();
+              } else {
+                // Non-admin users need admin to configure credentials first
+                this.showError('Widget credentials are not configured. Please contact your administrator to set up the SideDrawer integration.');
+              }
               return;
             }
             
