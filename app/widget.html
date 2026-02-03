@@ -350,13 +350,37 @@
           
           console.log('✅ Session bridge ready (localStorage only, no Zoho SDK needed)');
           
-          // For web tab widgets, Zoho SDK is already initialized by Zoho
-          // Do NOT call ZOHO.embeddedApp.init() as it causes "Parentwindow reference not found" errors
+          // Initialize Zoho SDK according to official documentation
+          // Must register PageLoad listener BEFORE calling init()
           const isStandalone = window.self === window.top;
-          if (!isStandalone && typeof ZOHO !== 'undefined') {
-            // SDK is already available in web tab context - no init() needed
-            this.zohoInitialized = true;
-            console.log('[SideDrawer Widget] ✅ Zoho SDK available (already initialized by Zoho for web tab widgets)');
+          if (!isStandalone && typeof ZOHO !== 'undefined' && ZOHO.embeddedApp) {
+            try {
+              // Register PageLoad event listener FIRST (before init) as per Zoho docs
+              ZOHO.embeddedApp.on("PageLoad", (data) => {
+                console.log('[SideDrawer Widget] PageLoad event fired:', data);
+                this.zohoInitialized = true;
+              });
+              
+              // Then initialize the SDK (as per official Zoho documentation)
+              console.log('[SideDrawer Widget] Initializing Zoho SDK...');
+              const initPromise = ZOHO.embeddedApp.init();
+              
+              // Wait for init to complete, then add small delay for SDK internal context
+              initPromise.then(async () => {
+                console.log('[SideDrawer Widget] ✅ Zoho SDK init() completed');
+                // Small delay to ensure SDK internal context is ready
+                await new Promise(resolve => setTimeout(resolve, 500));
+                this.zohoInitialized = true;
+                console.log('[SideDrawer Widget] ✅ Zoho SDK ready for API calls');
+              }).catch((error) => {
+                console.warn('[SideDrawer Widget] ⚠️ Zoho SDK initialization failed:', error);
+                // Set flag anyway - SDK might still work
+                this.zohoInitialized = true;
+              });
+            } catch (error) {
+              console.warn('[SideDrawer Widget] ⚠️ Error setting up Zoho SDK:', error);
+              this.zohoInitialized = false;
+            }
           } else if (isStandalone) {
             console.log('[SideDrawer Widget] Standalone mode - Zoho SDK not available');
           }
@@ -412,6 +436,22 @@
             if (typeof window.AccountSelectionModal !== 'undefined') {
               this.accountSelectionModal = new window.AccountSelectionModal(this);
               window.accountSelectionModal = this.accountSelectionModal; // Make globally accessible
+            }
+            
+            // Wait for SDK initialization to complete before loading config
+            // This ensures SDK internal context is ready before calling getCurrentUser()
+            if (!isStandalone && typeof ZOHO !== 'undefined') {
+              let attempts = 0;
+              while (!this.zohoInitialized && attempts < 50) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                attempts++;
+              }
+              if (this.zohoInitialized) {
+                console.log('[SideDrawer Widget] SDK ready, proceeding with config load');
+              } else {
+                console.warn('[SideDrawer Widget] SDK initialization timeout, proceeding anyway');
+                this.zohoInitialized = true; // Proceed anyway
+              }
             }
             
             // Load Zoho config and check permissions BEFORE initializing UI
