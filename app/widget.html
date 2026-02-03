@@ -362,16 +362,20 @@
               });
               
               // Then initialize the SDK (as per official Zoho documentation)
+              // Use Promise.race() with timeout to prevent hanging (pattern from working example)
               console.log('[SideDrawer Widget] Initializing Zoho SDK...');
               try {
-                await ZOHO.embeddedApp.init();
+                await Promise.race([
+                  ZOHO.embeddedApp.init(),
+                  new Promise((_, reject) => setTimeout(() => reject(new Error('Init timeout')), 5000))
+                ]);
                 console.log('[SideDrawer Widget] ✅ Zoho SDK init() completed');
                 // Small delay to ensure SDK internal context is ready
                 await new Promise(resolve => setTimeout(resolve, 500));
                 this.zohoInitialized = true;
                 console.log('[SideDrawer Widget] ✅ Zoho SDK ready for API calls');
               } catch (error) {
-                console.warn('[SideDrawer Widget] ⚠️ Zoho SDK initialization failed:', error);
+                console.warn('[SideDrawer Widget] ⚠️ Zoho SDK initialization failed or timed out:', error.message);
                 // Set flag anyway - SDK might still work
                 this.zohoInitialized = true;
               }

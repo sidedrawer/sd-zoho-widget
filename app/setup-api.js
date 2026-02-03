@@ -86,10 +86,40 @@ async function checkUserHasManageOrgPermission() {
       return false;
     }
     
+    // Retry getCurrentUser() up to 3 times with delays (SDK context may not be ready immediately)
     console.log('[Setup API] Calling ZOHO.CRM.CONFIG.getCurrentUser()...');
-    const user = await ZOHO.CRM.CONFIG.getCurrentUser();
-    console.log('[Setup API] getCurrentUser() promise resolved');
-    console.log('[Setup API] getCurrentUser() returned:', user);
+    let user = null;
+    let lastError = null;
+    const maxRetries = 3;
+    const retryDelay = 500;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[Setup API] getCurrentUser() attempt ${attempt}/${maxRetries}...`);
+        user = await ZOHO.CRM.CONFIG.getCurrentUser();
+        console.log('[Setup API] getCurrentUser() promise resolved');
+        console.log('[Setup API] getCurrentUser() returned:', user);
+        break; // Success - exit retry loop
+      } catch (error) {
+        lastError = error;
+        console.warn(`[Setup API] getCurrentUser() attempt ${attempt} failed:`, error.message);
+        
+        if (attempt < maxRetries) {
+          console.log(`[Setup API] Retrying in ${retryDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        } else {
+          console.error('[Setup API] All getCurrentUser() attempts failed');
+        }
+      }
+    }
+    
+    // If all retries failed, return false instead of throwing
+    if (!user) {
+      console.warn('[Setup API] getCurrentUser() failed after all retries, returning false (standard user)');
+      console.warn('[Setup API] Last error:', lastError?.message);
+      return false;
+    }
+    
     console.log('[Setup API] user type:', typeof user);
     console.log('[Setup API] user is null:', user === null);
     console.log('[Setup API] user is undefined:', user === undefined);
