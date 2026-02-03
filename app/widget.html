@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="widget-version" content="1.0.0">
+    <meta name="build-date" content="2026-01-31">
     <title>SideDrawer Integration</title>
     <!-- Zoho CRM SDK -->
     <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
@@ -73,6 +75,70 @@
       console.log('  Client ID:', OAUTH_CONFIG.clientId ? 'Set' : 'NOT SET');
       console.log('  Redirect URI:', OAUTH_CONFIG.redirectUri);
       console.log('  Is OAuth Callback:', isOAuthCallback);
+
+      // Define reset functions IMMEDIATELY (before any async operations)
+      window.resetSideDrawerConfig = async function() {
+        if (!window.auth) {
+          console.error('❌ Auth instance not available. Using simple reset...');
+          window.resetSideDrawerConfigSimple();
+          return;
+        }
+        if (confirm('Are you sure you want to reset all SideDrawer configuration? This will clear credentials and sessions.')) {
+          await window.auth.resetConfiguration();
+        }
+      };
+
+      window.resetSideDrawerConfigSimple = function() {
+        if (confirm('Reset all SideDrawer configuration? This will clear all stored data.')) {
+          // Clear localStorage
+          localStorage.removeItem('sd_widget_setup_config');
+          localStorage.removeItem('sdSession');
+          localStorage.removeItem('sidedrawer_refresh_token');
+          localStorage.removeItem('sidedrawer_code_verifier');
+          
+          // Clear all localStorage items related to SideDrawer and Auth0
+          Object.keys(localStorage).forEach(key => {
+            if (key.includes('sidedrawer') || key.includes('auth0') || key.includes('@@') || key.includes('_legacy')) {
+              localStorage.removeItem(key);
+            }
+          });
+          
+          // Clear sessionStorage
+          Object.keys(sessionStorage).forEach(key => {
+            if (key.startsWith('sd_config_')) {
+              sessionStorage.removeItem(key);
+            }
+          });
+          
+          sessionStorage.removeItem('sidedrawer_code_verifier');
+          
+          console.log('✅ Local storage cleared. Refreshing page...');
+          window.location.reload();
+        }
+      };
+
+      console.log('✅ Reset functions available: resetSideDrawerConfig(), resetSideDrawerConfigSimple()');
+      console.log('✅ Reset functions loaded:', {
+        resetSideDrawerConfig: typeof window.resetSideDrawerConfig,
+        resetSideDrawerConfigSimple: typeof window.resetSideDrawerConfigSimple
+      });
+
+      // Widget version for cache verification
+      const WIDGET_VERSION = '1.0.0';
+      const BUILD_DATE = '2026-01-31';
+
+      // Log version information
+      console.log('📦 SideDrawer Widget Version:', WIDGET_VERSION);
+      console.log('📅 Build Date:', BUILD_DATE);
+      console.log('🔗 Loaded from:', window.location.href);
+
+      // Check if version parameter matches
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlVersion = urlParams.get('v');
+      if (urlVersion && urlVersion !== WIDGET_VERSION) {
+        console.warn('⚠️ Version mismatch! URL version:', urlVersion, 'Widget version:', WIDGET_VERSION);
+        console.warn('⚠️ You may be viewing a cached version. Clear cache or update URL parameter.');
+      }
 
       // Storage keys
       const STORAGE_KEYS = {
@@ -1790,8 +1856,53 @@
         }
       };
       
+      // Re-assign reset functions after auth creation (fallback - already defined earlier)
+      window.resetSideDrawerConfig = async function() {
+        if (!window.auth) {
+          console.error('❌ Auth instance not available. Using simple reset...');
+          window.resetSideDrawerConfigSimple();
+          return;
+        }
+        if (confirm('Are you sure you want to reset all SideDrawer configuration? This will clear credentials and sessions.')) {
+          await window.auth.resetConfiguration();
+        }
+      };
+
+      window.resetSideDrawerConfigSimple = window.resetSideDrawerConfigSimple || function() {
+        if (confirm('Reset all SideDrawer configuration? This will clear all stored data.')) {
+          // Clear localStorage
+          localStorage.removeItem('sd_widget_setup_config');
+          localStorage.removeItem('sdSession');
+          localStorage.removeItem('sidedrawer_refresh_token');
+          localStorage.removeItem('sidedrawer_code_verifier');
+          
+          // Clear all localStorage items related to SideDrawer and Auth0
+          Object.keys(localStorage).forEach(key => {
+            if (key.includes('sidedrawer') || key.includes('auth0') || key.includes('@@') || key.includes('_legacy')) {
+              localStorage.removeItem(key);
+            }
+          });
+          
+          // Clear sessionStorage
+          Object.keys(sessionStorage).forEach(key => {
+            if (key.startsWith('sd_config_')) {
+              sessionStorage.removeItem(key);
+            }
+          });
+          
+          sessionStorage.removeItem('sidedrawer_code_verifier');
+          
+          console.log('✅ Local storage cleared. Refreshing page...');
+          window.location.reload();
+        }
+      };
+
       console.log('💡 Run resetSideDrawerConfig() in console to reset all configuration');
       console.log('💡 Run resetSideDrawerConfigSimple() for quick reset without auth instance');
+      console.log('✅ Reset functions verified:', {
+        resetSideDrawerConfig: typeof window.resetSideDrawerConfig,
+        resetSideDrawerConfigSimple: typeof window.resetSideDrawerConfigSimple
+      });
       
       // Helper function to check session status (can be called from console)
       window.checkSideDrawerSession = async function() {
@@ -1865,6 +1976,21 @@
       };
       
       console.log('💡 Run checkSideDrawerSession() in console to check session status');
+      
+      // Ensure reset functions are available on DOM ready (final fallback)
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          if (typeof window.resetSideDrawerConfig === 'undefined') {
+            console.warn('⚠️ Reset functions not found, redefining...');
+            window.resetSideDrawerConfigSimple();
+          }
+        });
+      } else {
+        // DOM already loaded, verify functions exist
+        if (typeof window.resetSideDrawerConfig === 'undefined') {
+          console.warn('⚠️ Reset functions not found after page load');
+        }
+      }
     </script>
   </body>
 </html>
