@@ -350,6 +350,25 @@
           
           console.log('✅ Session bridge ready (localStorage only, no Zoho SDK needed)');
           
+          // Initialize Zoho SDK if running in Zoho environment (not standalone)
+          const isStandalone = window.self === window.top;
+          if (!isStandalone && typeof ZOHO !== 'undefined' && ZOHO.embeddedApp && typeof ZOHO.embeddedApp.init === 'function') {
+            try {
+              console.log('[SideDrawer Widget] Initializing Zoho SDK...');
+              await Promise.race([
+                ZOHO.embeddedApp.init(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Init timeout')), 5000))
+              ]);
+              this.zohoInitialized = true;
+              console.log('[SideDrawer Widget] ✅ Zoho SDK initialized successfully');
+            } catch (initError) {
+              console.warn('[SideDrawer Widget] ⚠️ Zoho SDK initialization failed:', initError.message);
+              // Continue anyway - some features might still work
+            }
+          } else if (isStandalone) {
+            console.log('[SideDrawer Widget] Standalone mode - skipping Zoho SDK initialization');
+          }
+          
           try {
             // Set up message listener for OAuth popup callback
             window.addEventListener('message', async (event) => {

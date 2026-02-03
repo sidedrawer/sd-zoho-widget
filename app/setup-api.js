@@ -68,31 +68,9 @@ async function checkUserHasManageOrgPermission() {
       return false;
     }
     
-    console.log('[Setup API] ZOHO SDK found, initializing...');
+    console.log('[Setup API] ZOHO SDK found, waiting for SDK to be ready...');
     
-    // Initialize Zoho SDK if not already initialized
-    if (ZOHO.embeddedApp && typeof ZOHO.embeddedApp.init === 'function') {
-      try {
-        console.log('[Setup API] Calling ZOHO.embeddedApp.init()...');
-        await Promise.race([
-          ZOHO.embeddedApp.init(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Init timeout')), 5000))
-        ]);
-        console.log('[Setup API] ZOHO.embeddedApp.init() completed successfully');
-      } catch (initError) {
-        // Check if already initialized (some SDKs throw error if already initialized)
-        if (initError.message.includes('timeout') || initError.message.includes('already')) {
-          console.warn('[Setup API] Zoho SDK init timeout or already initialized:', initError.message);
-        } else {
-          console.warn('[Setup API] Zoho SDK init failed:', initError.message);
-          // Continue anyway - might still work
-        }
-      }
-    } else {
-      console.log('[Setup API] ZOHO.embeddedApp.init not available - SDK may already be initialized');
-    }
-    
-    // Wait for ZOHO.CRM.CONFIG to be available after initialization
+    // Wait for ZOHO.CRM.CONFIG to be available (SDK should already be initialized by widget startup)
     attempts = 0;
     while ((!ZOHO?.CRM?.CONFIG?.getCurrentUser) && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -104,7 +82,7 @@ async function checkUserHasManageOrgPermission() {
     console.log('[Setup API] getCurrentUser function exists:', typeof ZOHO?.CRM?.CONFIG?.getCurrentUser === 'function');
     
     if (!ZOHO?.CRM?.CONFIG?.getCurrentUser) {
-      console.error('[Setup API] getCurrentUser function not available after initialization');
+      console.error('[Setup API] getCurrentUser function not available - SDK may not be initialized yet');
       return false;
     }
     
