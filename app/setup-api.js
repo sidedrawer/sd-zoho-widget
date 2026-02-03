@@ -40,18 +40,26 @@ function isStandaloneMode() {
  * @returns {Promise<boolean>} True if user is Administrator or in standalone mode
  */
 async function checkUserHasManageOrgPermission() {
+  console.log('[Setup API] checkUserHasManageOrgPermission called');
+  
   // Bypass permission check in standalone mode (local development)
   if (isStandaloneMode()) {
     console.log('[Setup API] Standalone mode detected - bypassing permission check');
     return true;
   }
   
+  console.log('[Setup API] Not in standalone mode - proceeding with Zoho permission check');
+  
   try {
+    console.log('[Setup API] Calling ZOHO.CRM.CONFIG.getCurrentUser()...');
     const user = await ZOHO.CRM.CONFIG.getCurrentUser();
+    console.log('[Setup API] getCurrentUser() returned:', user);
+    console.log('[Setup API] user?.users:', user?.users);
     const userData = user?.users?.[0];
+    console.log('[Setup API] Extracted userData:', userData);
     
     if (!userData) {
-      console.warn('[Setup API] No user data found');
+      console.warn('[Setup API] No user data found - user object:', user);
       return false;
     }
     
