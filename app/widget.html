@@ -350,35 +350,123 @@
           
           console.log('✅ Session bridge ready (localStorage only, no Zoho SDK needed)');
           
+          // Helper function to check if parent window is ready for SDK communication
+          const checkParentWindowReady = () => {
+            try {
+              // Check if we're in an iframe
+              if (window.self === window.top) return true; // Standalone mode
+              
+              // Check if parent window is accessible
+              if (!window.parent) return false;
+              
+              // Try to access parent (may throw in cross-origin scenarios)
+              try {
+                const test = window.parent.location;
+                return true;
+              } catch (e) {
+                // Cross-origin - this is normal for externally hosted widgets
+                // Parent window exists but we can't access location
+                return true; // Assume ready if parent exists
+              }
+            } catch (error) {
+              return false;
+            }
+          };
+          
+          // Helper function to test if SDK is actually ready (not just objects exist)
+          const testSDKReadiness = async () => {
+            try {
+              // Try a lightweight SDK call to verify context is ready
+              const testResult = await Promise.race([
+                ZOHO.CRM.CONFIG.getCurrentUser(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('SDK not ready')), 2000))
+              ]);
+              return true; // SDK is ready
+            } catch (error) {
+              return false; // SDK not ready yet
+            }
+          };
+          
           // Initialize Zoho SDK according to official documentation
-          // Must register PageLoad listener BEFORE calling init()
+          // For externally hosted widgets: init() may not resolve until PageLoad fires
           const isStandalone = window.self === window.top;
+          
+          // Check parent window readiness before SDK initialization
+          if (!isStandalone) {
+            const parentReady = checkParentWindowReady();
+            console.log('[SideDrawer Widget] Parent window ready:', parentReady);
+            if (!parentReady) {
+              console.warn('[SideDrawer Widget] ⚠️ Parent window not ready, SDK may not work properly');
+            }
+          }
+          
           if (!isStandalone && typeof ZOHO !== 'undefined' && ZOHO.embeddedApp) {
             try {
-              // Register PageLoad event listener FIRST (before init) as per Zoho docs
-              ZOHO.embeddedApp.on("PageLoad", (data) => {
-                console.log('[SideDrawer Widget] PageLoad event fired:', data);
-                this.zohoInitialized = true;
+              // Create a promise that resolves when PageLoad fires (SDK readiness signal)
+              let pageLoadResolve = null;
+              const pageLoadPromise = new Promise((resolve) => {
+                pageLoadResolve = resolve;
               });
               
-              // Then initialize the SDK (as per official Zoho documentation)
-              // Use Promise.race() with timeout to prevent hanging (pattern from working example)
-              console.log('[SideDrawer Widget] Initializing Zoho SDK...');
-              try {
-                await Promise.race([
-                  ZOHO.embeddedApp.init(),
-                  new Promise((_, reject) => setTimeout(() => reject(new Error('Init timeout')), 5000))
-                ]);
-                console.log('[SideDrawer Widget] ✅ Zoho SDK init() completed');
-                // Small delay to ensure SDK internal context is ready
-                await new Promise(resolve => setTimeout(resolve, 500));
+              // Register PageLoad event listener FIRST (before init) as per Zoho docs
+              // PageLoad event fires when SDK is ready for API calls
+              ZOHO.embeddedApp.on("PageLoad", (data) => {
+                console.log('[SideDrawer Widget] ✅ PageLoad event fired - SDK is ready:', data);
                 this.zohoInitialized = true;
-                console.log('[SideDrawer Widget] ✅ Zoho SDK ready for API calls');
+                if (pageLoadResolve) {
+                  pageLoadResolve();
+                }
+              });
+              
+              // Call init() WITHOUT awaiting (fire-and-forget)
+              // For externally hosted widgets, init() may not resolve until PageLoad fires
+              console.log('[SideDrawer Widget] Initializing Zoho SDK (fire-and-forget)...');
+              ZOHO.embeddedApp.init().catch(err => {
+                console.warn('[SideDrawer Widget] Init error (may be normal for externally hosted):', err.message);
+              });
+              
+              // Wait for PageLoad event OR timeout after 10 seconds
+              console.log('[SideDrawer Widget] Waiting for PageLoad event or SDK readiness...');
+              try {
+                // Create polling promise that tests SDK readiness
+                const pollSDKReadiness = async () => {
+                  let attempts = 0;
+                  const maxAttempts = 20; // 20 attempts * 500ms = 10 seconds
+                  
+                  while (attempts < maxAttempts) {
+                    attempts++;
+                    if (attempts % 4 === 0) {
+                      console.log(`[SideDrawer Widget] Still waiting for SDK... (${attempts * 500}ms elapsed)`);
+                    }
+                    
+                    const isReady = await testSDKReadiness();
+                    if (isReady) {
+                      console.log('[SideDrawer Widget] ✅ SDK readiness test passed');
+                      this.zohoInitialized = true;
+                      return;
+                    }
+                    
+                    // Wait before next attempt
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                  }
+                  
+                  console.warn('[SideDrawer Widget] ⚠️ SDK readiness timeout after 10 seconds');
+                  // Proceed anyway - retry logic will handle it
+                };
+                
+                await Promise.race([
+                  pageLoadPromise,
+                  pollSDKReadiness(),
+                  new Promise((resolve) => setTimeout(() => {
+                    console.warn('[SideDrawer Widget] ⚠️ PageLoad timeout after 10 seconds, proceeding anyway');
+                    resolve();
+                  }, 10000))
+                ]);
+                
+                console.log('[SideDrawer Widget] ✅ SDK initialization check complete');
               } catch (error) {
-                console.warn('[SideDrawer Widget] ⚠️ Zoho SDK initialization failed or timed out:', error.message);
-                console.warn('[SideDrawer Widget] SDK init error details:', error);
-                // Do NOT set zohoInitialized=true on failure - wait loop will handle timeout
-                this.zohoInitialized = false;
+                console.warn('[SideDrawer Widget] ⚠️ Error waiting for SDK readiness:', error);
+                // Proceed anyway - retry logic in getCurrentUser() will handle it
               }
             } catch (error) {
               console.warn('[SideDrawer Widget] ⚠️ Error setting up Zoho SDK:', error);
@@ -441,45 +529,19 @@
               window.accountSelectionModal = this.accountSelectionModal; // Make globally accessible
             }
             
-            // Wait for SDK initialization to complete before loading config
-            // This ensures SDK internal context is ready before calling getCurrentUser()
+            // SDK initialization is now handled above with PageLoad event
+            // The zohoInitialized flag is set when PageLoad fires or SDK readiness test passes
+            // No additional wait loop needed - proceed directly to config load
             if (!isStandalone && typeof ZOHO !== 'undefined') {
-              console.log('[SideDrawer Widget] Waiting for SDK initialization to complete...');
-              let attempts = 0;
-              const maxAttempts = 60; // 60 attempts * 100ms = 6 seconds (longer than init timeout)
-              
-              while (attempts < maxAttempts) {
-                // Check if SDK init completed successfully
-                if (this.zohoInitialized) {
-                  // Verify SDK methods are actually available
-                  if (ZOHO?.CRM?.CONFIG?.getCurrentUser) {
-                    console.log('[SideDrawer Widget] ✅ SDK ready and methods available, proceeding with config load');
-                    break;
-                  } else {
-                    console.log('[SideDrawer Widget] SDK flag set but methods not available yet, waiting...');
-                  }
-                }
-                
-                await new Promise(resolve => setTimeout(resolve, 100));
-                attempts++;
-                
-                if (attempts % 10 === 0) {
-                  console.log(`[SideDrawer Widget] Still waiting for SDK... (${attempts * 100}ms elapsed)`);
-                }
-              }
-              
-              // Final check - verify SDK methods are available
+              // Final verification - check if SDK methods are available
               if (ZOHO?.CRM?.CONFIG?.getCurrentUser) {
-                console.log('[SideDrawer Widget] ✅ SDK methods verified, proceeding with config load');
-                this.zohoInitialized = true;
+                console.log('[SideDrawer Widget] ✅ SDK methods available, proceeding with config load');
               } else {
-                console.warn('[SideDrawer Widget] ⚠️ SDK initialization timeout or methods not available');
+                console.warn('[SideDrawer Widget] ⚠️ SDK methods not yet available, but proceeding (retry logic will handle)');
                 console.warn('[SideDrawer Widget] ZOHO exists:', typeof ZOHO !== 'undefined');
                 console.warn('[SideDrawer Widget] ZOHO.CRM exists:', typeof ZOHO?.CRM !== 'undefined');
                 console.warn('[SideDrawer Widget] ZOHO.CRM.CONFIG exists:', typeof ZOHO?.CRM?.CONFIG !== 'undefined');
                 console.warn('[SideDrawer Widget] getCurrentUser exists:', typeof ZOHO?.CRM?.CONFIG?.getCurrentUser === 'function');
-                // Proceed anyway - retry logic in getCurrentUser() will handle it
-                this.zohoInitialized = true;
               }
             }
             

@@ -51,6 +51,16 @@ async function checkUserHasManageOrgPermission() {
   console.log('[Setup API] Not in standalone mode - proceeding with Zoho permission check');
   
   try {
+    // Check parent window accessibility for externally hosted widgets
+    if (window.self !== window.top) {
+      // We're in an iframe (externally hosted widget)
+      if (!window.parent) {
+        console.warn('[Setup API] ⚠️ Parent window not accessible - SDK may not work properly');
+        return false;
+      }
+      console.log('[Setup API] Parent window accessible:', typeof window.parent !== 'undefined');
+    }
+    
     // Wait for Zoho SDK to be available
     console.log('[Setup API] Checking Zoho SDK availability...');
     console.log('[Setup API] ZOHO object exists:', typeof ZOHO !== 'undefined');
@@ -86,12 +96,17 @@ async function checkUserHasManageOrgPermission() {
       return false;
     }
     
-    // Retry getCurrentUser() up to 3 times with delays (SDK context may not be ready immediately)
+    // Retry getCurrentUser() up to 3 times with longer delays for externally hosted widgets
+    // Externally hosted widgets need more time for parent window communication to establish
     console.log('[Setup API] Calling ZOHO.CRM.CONFIG.getCurrentUser()...');
     let user = null;
     let lastError = null;
     const maxRetries = 3;
-    const retryDelay = 500;
+    // Use longer retry delay for externally hosted widgets (iframe context)
+    const isExternallyHosted = window.self !== window.top;
+    const retryDelay = isExternallyHosted ? 1000 : 500; // 1 second for externally hosted, 500ms for others
+    
+    console.log(`[Setup API] Using retry delay: ${retryDelay}ms (externally hosted: ${isExternallyHosted})`);
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -102,13 +117,25 @@ async function checkUserHasManageOrgPermission() {
         break; // Success - exit retry loop
       } catch (error) {
         lastError = error;
-        console.warn(`[Setup API] getCurrentUser() attempt ${attempt} failed:`, error.message);
+        const errorMessage = error?.message || String(error);
+        console.warn(`[Setup API] getCurrentUser() attempt ${attempt} failed:`, errorMessage);
+        
+        // Check if error is related to SDK context not being ready
+        if (errorMessage.includes('getContext') || errorMessage.includes('Cannot read properties')) {
+          console.warn('[Setup API] SDK internal context not ready - this is common for externally hosted widgets');
+          console.warn('[Setup API] Waiting longer before retry...');
+        }
         
         if (attempt < maxRetries) {
           console.log(`[Setup API] Retrying in ${retryDelay}ms...`);
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         } else {
           console.error('[Setup API] All getCurrentUser() attempts failed');
+          console.error('[Setup API] Last error details:', {
+            name: lastError?.name,
+            message: lastError?.message,
+            stack: lastError?.stack
+          });
         }
       }
     }
@@ -117,6 +144,10 @@ async function checkUserHasManageOrgPermission() {
     if (!user) {
       console.warn('[Setup API] getCurrentUser() failed after all retries, returning false (standard user)');
       console.warn('[Setup API] Last error:', lastError?.message);
+      if (lastError?.message?.includes('getContext')) {
+        console.warn('[Setup API] ⚠️ SDK context error - widget may need more time to initialize');
+        console.warn('[Setup API] This is common for externally hosted widgets - parent window communication may not be ready');
+      }
       return false;
     }
     
