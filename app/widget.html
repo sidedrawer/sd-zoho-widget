@@ -376,8 +376,9 @@
                 console.log('[SideDrawer Widget] ✅ Zoho SDK ready for API calls');
               } catch (error) {
                 console.warn('[SideDrawer Widget] ⚠️ Zoho SDK initialization failed or timed out:', error.message);
-                // Set flag anyway - SDK might still work
-                this.zohoInitialized = true;
+                console.warn('[SideDrawer Widget] SDK init error details:', error);
+                // Do NOT set zohoInitialized=true on failure - wait loop will handle timeout
+                this.zohoInitialized = false;
               }
             } catch (error) {
               console.warn('[SideDrawer Widget] ⚠️ Error setting up Zoho SDK:', error);
@@ -443,16 +444,42 @@
             // Wait for SDK initialization to complete before loading config
             // This ensures SDK internal context is ready before calling getCurrentUser()
             if (!isStandalone && typeof ZOHO !== 'undefined') {
+              console.log('[SideDrawer Widget] Waiting for SDK initialization to complete...');
               let attempts = 0;
-              while (!this.zohoInitialized && attempts < 50) {
+              const maxAttempts = 60; // 60 attempts * 100ms = 6 seconds (longer than init timeout)
+              
+              while (attempts < maxAttempts) {
+                // Check if SDK init completed successfully
+                if (this.zohoInitialized) {
+                  // Verify SDK methods are actually available
+                  if (ZOHO?.CRM?.CONFIG?.getCurrentUser) {
+                    console.log('[SideDrawer Widget] ✅ SDK ready and methods available, proceeding with config load');
+                    break;
+                  } else {
+                    console.log('[SideDrawer Widget] SDK flag set but methods not available yet, waiting...');
+                  }
+                }
+                
                 await new Promise(resolve => setTimeout(resolve, 100));
                 attempts++;
+                
+                if (attempts % 10 === 0) {
+                  console.log(`[SideDrawer Widget] Still waiting for SDK... (${attempts * 100}ms elapsed)`);
+                }
               }
-              if (this.zohoInitialized) {
-                console.log('[SideDrawer Widget] SDK ready, proceeding with config load');
+              
+              // Final check - verify SDK methods are available
+              if (ZOHO?.CRM?.CONFIG?.getCurrentUser) {
+                console.log('[SideDrawer Widget] ✅ SDK methods verified, proceeding with config load');
+                this.zohoInitialized = true;
               } else {
-                console.warn('[SideDrawer Widget] SDK initialization timeout, proceeding anyway');
-                this.zohoInitialized = true; // Proceed anyway
+                console.warn('[SideDrawer Widget] ⚠️ SDK initialization timeout or methods not available');
+                console.warn('[SideDrawer Widget] ZOHO exists:', typeof ZOHO !== 'undefined');
+                console.warn('[SideDrawer Widget] ZOHO.CRM exists:', typeof ZOHO?.CRM !== 'undefined');
+                console.warn('[SideDrawer Widget] ZOHO.CRM.CONFIG exists:', typeof ZOHO?.CRM?.CONFIG !== 'undefined');
+                console.warn('[SideDrawer Widget] getCurrentUser exists:', typeof ZOHO?.CRM?.CONFIG?.getCurrentUser === 'function');
+                // Proceed anyway - retry logic in getCurrentUser() will handle it
+                this.zohoInitialized = true;
               }
             }
             
