@@ -469,7 +469,8 @@ class TenantCreationWizardWithCredentials {
   async loadRegions() {
     if (this.state.databaseRegions.length > 0) {
       if (!this.state.region && this.state.databaseRegions.length > 0) {
-        this.state.region = this.state.databaseRegions[0].countrycode;
+        // Use databaseregion, not countrycode (aligned with API expectations)
+        this.state.region = this.state.databaseRegions[0].databaseregion;
       }
     }
   }
@@ -786,7 +787,7 @@ class TenantCreationWizardWithCredentials {
         <select class="wizard-form-select" id="region-select">
           <option value="">${dict.tenantsetupname_tenantregionplaceholder || 'Select region'}</option>
           ${this.state.databaseRegions.map(region => `
-            <option value="${region.countrycode}" ${this.state.region === region.countrycode ? 'selected' : ''}>
+            <option value="${region.databaseregion}" ${this.state.region === region.databaseregion ? 'selected' : ''}>
               ${this.getCountryName(region.countrycode)}
             </option>
           `).join('')}

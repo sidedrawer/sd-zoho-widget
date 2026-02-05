@@ -280,9 +280,9 @@ class TenantCreationWizard {
   async loadRegions() {
     // Regions loaded from dictionary
     if (this.state.databaseRegions.length > 0) {
-      // Set default region if available
+      // Set default region if available (use databaseregion, not countrycode)
       if (!this.state.region && this.state.databaseRegions.length > 0) {
-        this.state.region = this.state.databaseRegions[0].countrycode;
+        this.state.region = this.state.databaseRegions[0].databaseregion;
       }
     }
   }
@@ -557,7 +557,7 @@ class TenantCreationWizard {
         <select class="wizard-form-select" id="region-select">
           <option value="">${dict.tenantsetupname_tenantregionplaceholder || 'Select region'}</option>
           ${this.state.databaseRegions.map(region => `
-            <option value="${region.countrycode}" ${this.state.region === region.countrycode ? 'selected' : ''}>
+            <option value="${region.databaseregion}" ${this.state.region === region.databaseregion ? 'selected' : ''}>
               ${this.getCountryName(region.countrycode)}
             </option>
           `).join('')}
@@ -1789,7 +1789,10 @@ class TenantCreationWizard {
             <h3 class="info-box-title">Account Details Ready:</h3>
             <p><strong>Business Name:</strong> ${this.state.tenantName}</p>
             <p><strong>Domain:</strong> ${this.state.tenantDomain}.sidedrawer.com</p>
-            <p><strong>Region:</strong> ${this.getCountryName(this.state.region)}</p>
+            <p><strong>Region:</strong> ${(() => {
+              const regionObj = this.state.databaseRegions.find(r => r.databaseregion === this.state.region);
+              return regionObj ? this.getCountryName(regionObj.countrycode) : this.state.region;
+            })()}</p>
             <p><strong>Subscription:</strong> ${this.state.selectedPrice?.id}</p>
             <p><strong>Payment Method:</strong> ${paymentMethodId ? 'Token: ' + paymentMethodId.substring(0, 20) + '...' : 'Selected'}</p>
           </div>
