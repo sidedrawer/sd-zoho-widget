@@ -642,6 +642,23 @@ body {
   color: white;
 }
 
+.success-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.btn.btn-console-secondary {
+  background: #ffffff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.btn.btn-console-secondary:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
 /* Modal/Dialog Styles (matching Angular Material) */
 .modal-overlay {
   position: fixed;
@@ -999,6 +1016,10 @@ body {
 
 .mt-20 {
   margin-top: 20px;
+}
+
+.mt-10 {
+  margin-top: 10px;
 }
 
 .mt-24 {

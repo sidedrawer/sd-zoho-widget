@@ -1947,9 +1947,14 @@ class TenantCreationWizard {
           <p class="success-text">
             Your SideDrawer account has been created and you are now logged in.
           </p>
-          <button class="btn btn-success mt-24" onclick="location.reload()">
-            Continue
-          </button>
+          <div class="success-actions">
+            <button type="button" class="btn btn-success mt-24" onclick="location.reload()">
+              Continue
+            </button>
+            <button type="button" class="btn btn-console-secondary mt-10" onclick="void window.openSideDrawerConsoleSso()">
+              Continue tenant configuration in Console
+            </button>
+          </div>
         </div>
       </div>
     `;

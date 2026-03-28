@@ -1335,6 +1335,26 @@
 
       // Tenant Creation Wizard, StripeService, and TenantCreationWizard classes are in tenant-wizard.js
       const auth = new SideDrawerAuth();
+
+      /** Same SSO contract as SidedrawerRelated presets.js goToConsole — opens Console with ?token= */
+      window.openSideDrawerConsoleSso = async function() {
+        try {
+          const token = await auth.getAccessToken();
+          if (!token) {
+            alert('Could not open Console: your session is not available. Try reloading the page.');
+            return;
+          }
+          const isSandbox = OAUTH_CONFIG.audience && OAUTH_CONFIG.audience.includes('sbx');
+          const consoleBase = isSandbox
+            ? 'https://console-sbx.sidedrawersbx.com'
+            : 'https://console.sidedrawer.com';
+          const url = `${consoleBase}?token=${encodeURIComponent(token)}`;
+          window.open(url, '_blank', 'noopener,noreferrer');
+        } catch (e) {
+          console.error('[openSideDrawerConsoleSso]', e);
+          alert('Could not open Console. Please try again.');
+        }
+      };
       
       // Helper function to check session status (can be called from console)
       window.checkSideDrawerSession = async function() {
