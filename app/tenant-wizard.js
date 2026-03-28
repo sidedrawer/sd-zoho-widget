@@ -319,19 +319,47 @@ class TenantCreationWizard {
       tryVal(region.value) ||
       tryVal(region.regionId);
     if (primary) return primary;
-    if (region._id != null) {
-      const id = tryVal(region._id);
-      if (id) return id;
-    }
     const code = tryVal(region.code) || tryVal(region.regionCode);
     if (code) return code;
     const cc = this.getRegionCountryCode(region);
     if (cc && /^[A-Za-z]{2}$/.test(cc)) return cc.toUpperCase();
+    if (region._id != null) {
+      const id = tryVal(region._id);
+      if (id) return id;
+    }
     if (region.id != null && region.id !== region._id) {
       const id = tryVal(region.id);
       if (id) return id;
     }
     return '';
+  }
+
+  /**
+   * True if the CMS row has a real slug, code, or ISO country (not a blank default placeholder).
+   */
+  regionRowHasDatabaseregionOrCountryOrCode(region) {
+    if (region == null || region === '') return false;
+    if (typeof region === 'string') return !!String(region).trim();
+    const tryVal = (v) => {
+      if (v == null) return '';
+      const s = String(v).trim();
+      if (!s || s === 'undefined' || s === 'null') return '';
+      return s;
+    };
+    if (
+      tryVal(region.databaseregion) ||
+      tryVal(region.databaseRegion) ||
+      tryVal(region.DatabaseRegion) ||
+      tryVal(region.dataBaseRegion) ||
+      tryVal(region.data_base_region) ||
+      tryVal(region.regionKey) ||
+      tryVal(region.slug) ||
+      tryVal(region.value) ||
+      tryVal(region.regionId)
+    ) return true;
+    if (tryVal(region.code) || tryVal(region.regionCode)) return true;
+    const cc = this.getRegionCountryCode(region);
+    return !!(cc && /^[A-Za-z]{2}$/.test(cc));
   }
 
   getRegionCountryCode(region) {
@@ -352,6 +380,7 @@ class TenantCreationWizard {
     rows.forEach((region, index) => {
       let v = this.getRegionDatabaseregion(region);
       if (!v) return;
+      if (/^[a-f0-9]{24}$/i.test(v) && !this.regionRowHasDatabaseregionOrCountryOrCode(region)) return;
       if (seen.has(v)) {
         const alt = region._id != null ? String(region._id).trim() : '';
         v = alt && !seen.has(alt) ? alt : `${v}#${index}`;
