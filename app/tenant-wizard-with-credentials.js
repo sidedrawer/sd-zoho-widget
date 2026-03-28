@@ -202,6 +202,8 @@ class TenantCreationWizardWithCredentials {
       processSteps: [],
       // Skip steps flag
       skipPayment: false, // Set to true if user has default payment method (skip payment step only)
+      /** Stripe customer.currency when loaded; billing prices must match to avoid multi-currency errors */
+      customerBillingCurrency: null,
       // UI State
       loading: false,
       error: null,
@@ -229,6 +231,7 @@ class TenantCreationWizardWithCredentials {
 
     try {
       this.state.loading = true;
+      this.state.customerBillingCurrency = null;
       this.render(); // Show loading state
       
       console.log('🔄 Phase 1: Loading initial data...');
@@ -276,7 +279,7 @@ class TenantCreationWizardWithCredentials {
       await this.loadStripePublicKey();
       console.log('✅ Stripe public key loaded');
 
-      this.syncCurrencyFromRegion();
+      this.syncWizardCurrency();
       this.applyDefaultSubscriptionSelection();
 
       console.log('✅ Phase 1 complete - all initial data loaded');
@@ -471,11 +474,25 @@ class TenantCreationWizardWithCredentials {
 
   getRegionDatabaseregion(region) {
     if (!region) return '';
-    const id = region.databaseregion ?? region.databaseRegion ?? region.DatabaseRegion;
+    const id =
+      region.databaseregion ??
+      region.databaseRegion ??
+      region.DatabaseRegion ??
+      region.dataBaseRegion ??
+      region.code ??
+      region.regionCode;
     if (id == null) return '';
     const s = String(id).trim();
     if (!s || s === 'undefined' || s === 'null') return '';
     return s;
+  }
+
+  getRegionCountryCode(region) {
+    if (!region) return undefined;
+    const cc = region.countrycode ?? region.countryCode;
+    if (cc == null) return undefined;
+    const t = String(cc).trim();
+    return t.length ? t : undefined;
   }
 
   isKnownDatabaseRegion(regionId) {
@@ -510,7 +527,7 @@ class TenantCreationWizardWithCredentials {
 
   async loadCurrencies() {
     if (this.state.currencies.length > 0) {
-      this.syncCurrencyFromRegion();
+      this.syncWizardCurrency();
     }
   }
 
@@ -532,7 +549,7 @@ class TenantCreationWizardWithCredentials {
     const regionRow = this.state.databaseRegions.find(
       r => this.getRegionDatabaseregion(r) === String(this.state.region || '').trim()
     );
-    const countryCode = regionRow?.countrycode;
+    const countryCode = regionRow ? this.getRegionCountryCode(regionRow) : undefined;
     let next;
     if (countryCode === 'CA' && validCurrencies.some(c => c.currency.toLowerCase() === 'cad')) {
       next = 'cad';
@@ -544,6 +561,25 @@ class TenantCreationWizardWithCredentials {
     }
     this.state.currency = next;
     this.updatePriceLists();
+  }
+
+  /**
+   * Prefer Stripe customer currency when present (locked customer); else region-based currency.
+   */
+  syncWizardCurrency() {
+    const locked = this.state.customerBillingCurrency;
+    if (locked) {
+      const validCurrencies = this.state.currencies.filter(c => c && c.currency && c.enabled);
+      const match = validCurrencies.find(
+        c => c.currency && c.currency.toLowerCase() === String(locked).toLowerCase()
+      );
+      if (match) {
+        this.state.currency = match.currency.toLowerCase();
+        this.updatePriceLists();
+        return;
+      }
+    }
+    this.syncCurrencyFromRegion();
   }
 
   applyDefaultSubscriptionSelection() {
@@ -579,7 +615,10 @@ class TenantCreationWizardWithCredentials {
   }
 
   async loadCustomer() {
-    if (!this.state.customerId) return;
+    if (!this.state.customerId) {
+      this.state.customerBillingCurrency = null;
+      return;
+    }
 
     try {
       const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
@@ -598,14 +637,15 @@ class TenantCreationWizardWithCredentials {
       if (response.ok) {
         const customer = await response.json();
         console.log(`  ✓ Customer loaded (ID: ${customer.id}, currency: ${customer?.currency || 'none'})`);
-        if (customer?.currency && !this.state.currency) {
-          this.state.currency = customer.currency.toLowerCase();
-          this.updatePriceLists();
-        }
+        this.state.customerBillingCurrency = customer?.currency
+          ? String(customer.currency).toLowerCase().trim() || null
+          : null;
       } else {
+        this.state.customerBillingCurrency = null;
         console.warn(`  ⚠ Failed to load customer: ${response.status} ${response.statusText} (may not exist yet)`);
       }
     } catch (error) {
+      this.state.customerBillingCurrency = null;
       console.error('❌ Error loading customer:', error);
       // Don't throw - customer might not exist yet
     }
@@ -874,9 +914,11 @@ class TenantCreationWizardWithCredentials {
             const rid = this.getRegionDatabaseregion(region);
             if (!rid) return '';
             const sel = String(this.state.region || '').trim() === rid ? 'selected' : '';
+            const label =
+              this.getCountryName(this.getRegionCountryCode(region)) || rid;
             return `
             <option value="${rid}" ${sel}>
-              ${this.getCountryName(region.countrycode)}
+              ${label}
             </option>`;
           }).join('')}
         </select>
@@ -1125,7 +1167,9 @@ class TenantCreationWizardWithCredentials {
         regionSelect.addEventListener('change', (e) => {
           this.state.region = String(e.target.value || '').trim();
           this.clearError('region-error');
-          this.syncCurrencyFromRegion();
+          if (!this.state.customerBillingCurrency) {
+            this.syncCurrencyFromRegion();
+          }
           this.applyDefaultSubscriptionSelection();
           this.render();
         });
@@ -1273,7 +1317,7 @@ class TenantCreationWizardWithCredentials {
         this.render();
         return;
       }
-      this.syncCurrencyFromRegion();
+      this.syncWizardCurrency();
       this.applyDefaultSubscriptionSelection();
       if (!this.state.selectedPrice) {
         this.state.validationError = dict.tenantsetupsubscription_selectplan || 'Please select a subscription plan';

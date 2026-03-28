@@ -279,15 +279,29 @@ class TenantCreationWizard {
   }
 
   /**
-   * CMS may use databaseregion, databaseRegion, or DatabaseRegion; values may be non-string.
+   * CMS may use several spellings for the tenant DB region id; values may be non-string.
    */
   getRegionDatabaseregion(region) {
     if (!region) return '';
-    const id = region.databaseregion ?? region.databaseRegion ?? region.DatabaseRegion;
+    const id =
+      region.databaseregion ??
+      region.databaseRegion ??
+      region.DatabaseRegion ??
+      region.dataBaseRegion ??
+      region.code ??
+      region.regionCode;
     if (id == null) return '';
     const s = String(id).trim();
     if (!s || s === 'undefined' || s === 'null') return '';
     return s;
+  }
+
+  getRegionCountryCode(region) {
+    if (!region) return undefined;
+    const cc = region.countrycode ?? region.countryCode;
+    if (cc == null) return undefined;
+    const t = String(cc).trim();
+    return t.length ? t : undefined;
   }
 
   isKnownDatabaseRegion(regionId) {
@@ -348,7 +362,7 @@ class TenantCreationWizard {
     const regionRow = this.state.databaseRegions.find(
       r => this.getRegionDatabaseregion(r) === String(this.state.region || '').trim()
     );
-    const countryCode = regionRow?.countrycode;
+    const countryCode = regionRow ? this.getRegionCountryCode(regionRow) : undefined;
     let next;
     if (countryCode === 'CA' && validCurrencies.some(c => c.currency.toLowerCase() === 'cad')) {
       next = 'cad';
@@ -647,9 +661,11 @@ class TenantCreationWizard {
             const rid = this.getRegionDatabaseregion(region);
             if (!rid) return '';
             const sel = String(this.state.region || '').trim() === rid ? 'selected' : '';
+            const label =
+              this.getCountryName(this.getRegionCountryCode(region)) || rid;
             return `
             <option value="${rid}" ${sel}>
-              ${this.getCountryName(region.countrycode)}
+              ${label}
             </option>`;
           }).join('')}
         </select>
@@ -1805,7 +1821,7 @@ class TenantCreationWizard {
               const regionObj = this.state.databaseRegions.find(
                 r => this.getRegionDatabaseregion(r) === String(this.state.region || '').trim()
               );
-              return regionObj ? this.getCountryName(regionObj.countrycode) : this.state.region;
+              return regionObj ? this.getCountryName(this.getRegionCountryCode(regionObj)) : this.state.region;
             })()}</p>
             <p><strong>Subscription:</strong> ${this.state.selectedPrice?.id}</p>
             <p><strong>Payment Method:</strong> ${paymentMethodId ? 'Token: ' + paymentMethodId.substring(0, 20) + '...' : 'Selected'}</p>
