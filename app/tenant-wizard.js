@@ -278,13 +278,45 @@ class TenantCreationWizard {
     }
   }
 
+  /**
+   * CMS may use databaseregion, databaseRegion, or DatabaseRegion; values may be non-string.
+   */
+  getRegionDatabaseregion(region) {
+    if (!region) return '';
+    const id = region.databaseregion ?? region.databaseRegion ?? region.DatabaseRegion;
+    if (id == null) return '';
+    const s = String(id).trim();
+    if (!s || s === 'undefined' || s === 'null') return '';
+    return s;
+  }
+
+  isKnownDatabaseRegion(regionId) {
+    const id = String(regionId || '').trim();
+    if (!id) return false;
+    return this.state.databaseRegions.some(r => this.getRegionDatabaseregion(r) === id);
+  }
+
+  syncRegionFromSelect() {
+    if (typeof document === 'undefined') return;
+    const el = document.getElementById('region-select');
+    if (!el) return;
+    const v = String(el.value || '').trim();
+    if (v && this.isKnownDatabaseRegion(v)) {
+      this.state.region = v;
+      this.clearError('region-error');
+    }
+  }
+
   async loadRegions() {
-    // Regions loaded from dictionary
-    if (this.state.databaseRegions.length > 0) {
-      // Set default region if available (use databaseregion, not countrycode)
-      if (!this.state.region && this.state.databaseRegions.length > 0) {
-        this.state.region = this.state.databaseRegions[0].databaseregion;
-      }
+    const regions = this.state.databaseRegions || [];
+    if (!regions.length) return;
+    const knownIds = regions.map(r => this.getRegionDatabaseregion(r)).filter(Boolean);
+    const firstId = knownIds[0] || '';
+    const current = String(this.state.region ?? '').trim();
+    if (!current || !knownIds.includes(current)) {
+      if (firstId) this.state.region = firstId;
+    } else {
+      this.state.region = current;
     }
   }
 
@@ -313,7 +345,9 @@ class TenantCreationWizard {
       this.updatePriceLists();
       return;
     }
-    const regionRow = this.state.databaseRegions.find(r => r.databaseregion === this.state.region);
+    const regionRow = this.state.databaseRegions.find(
+      r => this.getRegionDatabaseregion(r) === String(this.state.region || '').trim()
+    );
     const countryCode = regionRow?.countrycode;
     let next;
     if (countryCode === 'CA' && validCurrencies.some(c => c.currency.toLowerCase() === 'cad')) {
@@ -609,11 +643,15 @@ class TenantCreationWizard {
         <label class="wizard-form-label">${dict.tenantsetupname_tenantregion || 'Region'}</label>
         <select class="wizard-form-select" id="region-select">
           <option value="">${dict.tenantsetupname_tenantregionplaceholder || 'Select region'}</option>
-          ${this.state.databaseRegions.map(region => `
-            <option value="${region.databaseregion}" ${this.state.region === region.databaseregion ? 'selected' : ''}>
+          ${this.state.databaseRegions.map(region => {
+            const rid = this.getRegionDatabaseregion(region);
+            if (!rid) return '';
+            const sel = String(this.state.region || '').trim() === rid ? 'selected' : '';
+            return `
+            <option value="${rid}" ${sel}>
               ${this.getCountryName(region.countrycode)}
-            </option>
-          `).join('')}
+            </option>`;
+          }).join('')}
         </select>
         <div class="wizard-form-error" id="region-error"></div>
       </div>
@@ -936,7 +974,7 @@ class TenantCreationWizard {
 
       if (regionSelect) {
         regionSelect.addEventListener('change', (e) => {
-          this.state.region = e.target.value;
+          this.state.region = String(e.target.value || '').trim();
           this.clearError('region-error');
           this.syncCurrencyFromRegion();
           this.applyDefaultSubscriptionSelection();
@@ -961,6 +999,8 @@ class TenantCreationWizard {
           }
         });
       }
+
+      this.syncRegionFromSelect();
     }
 
     // Payment step — Initialize Stripe Elements
@@ -1049,6 +1089,8 @@ class TenantCreationWizard {
     this.state.validationError = null;
     const dict = this.state.dictionary || {};
 
+    this.syncRegionFromSelect();
+
     // Email validation
     if (!this.state.email || this.state.email.trim().length === 0) {
       this.showError('email-error', dict.globalparams_mandatoryfield || 'Email is required');
@@ -1091,8 +1133,9 @@ class TenantCreationWizard {
       isValid = false;
     }
 
-    // Region validation
-    if (!this.state.region) {
+    // Region validation (must match a dictionary row with a real databaseregion id)
+    const regionId = String(this.state.region || '').trim();
+    if (!regionId || !this.isKnownDatabaseRegion(regionId)) {
       this.showError('region-error', dict.globalparams_mandatoryfield || 'Region is required');
       isValid = false;
     }
@@ -1759,7 +1802,9 @@ class TenantCreationWizard {
             <p><strong>Business Name:</strong> ${this.state.tenantName}</p>
             <p><strong>Domain:</strong> ${this.state.tenantDomain}.sidedrawer.com</p>
             <p><strong>Region:</strong> ${(() => {
-              const regionObj = this.state.databaseRegions.find(r => r.databaseregion === this.state.region);
+              const regionObj = this.state.databaseRegions.find(
+                r => this.getRegionDatabaseregion(r) === String(this.state.region || '').trim()
+              );
               return regionObj ? this.getCountryName(regionObj.countrycode) : this.state.region;
             })()}</p>
             <p><strong>Subscription:</strong> ${this.state.selectedPrice?.id}</p>
