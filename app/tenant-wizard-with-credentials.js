@@ -747,20 +747,21 @@ class TenantCreationWizardWithCredentials {
             <div class="wizard-step-circle">${this.state.currentStep > 0 ? '✓' : '1'}</div>
             <div class="wizard-step-label">${this.getDictionaryValue('tenantsetupname_steptitle') || 'Business Info'}</div>
           </div>
+          ${!this.state.skipPayment ? `
           <div class="wizard-step ${this.state.currentStep === 1 ? 'active' : this.state.currentStep > 1 ? 'completed' : ''}">
             <div class="wizard-step-circle">${this.state.currentStep > 1 ? '✓' : '2'}</div>
-            <div class="wizard-step-label">${this.getDictionaryValue('tenantsetupsubscription_steptitle') || 'Subscription'}</div>
-          </div>
-          ${!this.state.skipPayment ? `
-          <div class="wizard-step ${this.state.currentStep === 2 ? 'active' : this.state.currentStep > 2 ? 'completed' : ''}">
-            <div class="wizard-step-circle">${this.state.currentStep > 2 ? '✓' : '3'}</div>
             <div class="wizard-step-label">${this.getDictionaryValue('tenantsetuppayment_steptitle') || 'Payment'}</div>
           </div>
-          ` : ''}
-          <div class="wizard-step ${this.state.currentStep === (this.state.skipPayment ? 2 : 3) ? 'active' : this.state.currentStep > (this.state.skipPayment ? 2 : 3) ? 'completed' : ''}">
-            <div class="wizard-step-circle">${this.state.currentStep > (this.state.skipPayment ? 2 : 3) ? '✓' : (this.state.skipPayment ? '3' : '4')}</div>
+          <div class="wizard-step ${this.state.currentStep === 2 ? 'active' : this.state.currentStep > 2 ? 'completed' : ''}">
+            <div class="wizard-step-circle">${this.state.currentStep > 2 ? '✓' : '3'}</div>
             <div class="wizard-step-label">${this.getDictionaryValue('tenantsignupsummary_steptitle') || 'Summary'}</div>
           </div>
+          ` : `
+          <div class="wizard-step ${this.state.currentStep === 1 ? 'active' : this.state.currentStep > 1 ? 'completed' : ''}">
+            <div class="wizard-step-circle">${this.state.currentStep > 1 ? '✓' : '2'}</div>
+            <div class="wizard-step-label">${this.getDictionaryValue('tenantsignupsummary_steptitle') || 'Summary'}</div>
+          </div>
+          `}
         </div>
 
         <div class="wizard-content">
@@ -770,7 +771,7 @@ class TenantCreationWizardWithCredentials {
         <div class="wizard-footer">
           ${this.state.currentStep > 0 ? `<button class="btn" onclick="tenantWizardWithCredentials.previousStep()">${this.getDictionaryValue('globalparams_back') || 'Back'}</button>` : '<div></div>'}
           <button class="btn btn-success" ${this.state.loading ? 'disabled' : ''} id="wizard-next-button">
-            ${(this.state.skipPayment && this.state.currentStep === 2) || (!this.state.skipPayment && this.state.currentStep === 3)
+            ${(this.state.skipPayment && this.state.currentStep === 1) || (!this.state.skipPayment && this.state.currentStep === 2)
               ? (this.getDictionaryValue('tenantsetuppayment_primarybutton') || 'Create Account')
               : (this.getDictionaryValue('globalparams_next') || 'Next')}
           </button>
@@ -784,21 +785,18 @@ class TenantCreationWizardWithCredentials {
   renderStep() {
     if (this.state.currentStep === 0) {
       return this.renderStep1();
-    } else if (this.state.currentStep === 1) {
-      // Always show subscription step
-      return this.renderStep2();
-    } else if (this.state.skipPayment) {
-      // Skip payment step, go directly to summary
-      if (this.state.currentStep === 2) {
+    }
+    if (this.state.skipPayment) {
+      if (this.state.currentStep === 1) {
         return this.renderStep4();
       }
-    } else {
-      // Normal flow with payment step
-      if (this.state.currentStep === 2) {
-        return this.renderStep3();
-      } else if (this.state.currentStep === 3) {
-        return this.renderStep4();
-      }
+      return '';
+    }
+    if (this.state.currentStep === 1) {
+      return this.renderStep3();
+    }
+    if (this.state.currentStep === 2) {
+      return this.renderStep4();
     }
     return '';
   }
@@ -848,102 +846,18 @@ class TenantCreationWizardWithCredentials {
         </select>
         <div class="wizard-form-error" id="region-error"></div>
       </div>
-    `;
-  }
 
-  renderStep2() {
-    const dict = this.state.dictionary || {};
-    this.updatePriceLists();
-    const usersPricesToShow = this.state.priceTab === 'month' ? this.state.monthlyUsersPrices : this.state.yearlyUsersPrices;
-    const availableCurrencies = this.state.currencies.filter(c => c && c.currency && c.enabled);
-    
-    return `
-      ${this.state.validationError ? `<div class="validation-error">${this.state.validationError}</div>` : ''}
-      
-      <p class="mb-24 text-gray">${dict.tenantsignupsubscription_description || dict.tenantsetupsubscription_description || 'Select your subscription plan'}</p>
-      
-      <div class="tenant-creation-form-price-section">
-        <div class="tenant-creation-form-price-section-currency">
-          <h4>${dict.tenantsignupsubscription_selectcurrency || dict.tenantsetupsubscription_selectcurrency || 'Currency'}</h4>
-          <div class="toggle-button-group">
-            ${availableCurrencies.map(currency => `
-              <button
-                class="toggle-button ${this.state.currency && this.state.currency.toLowerCase() === currency.currency.toLowerCase() ? 'active' : ''}"
-                onclick="tenantWizardWithCredentials.selectCurrency('${currency.currency}')"
-              >
-                ${currency.symbol} ${currency.isoLabel}
-              </button>
-            `).join('')}
-          </div>
-        </div>
-
-        <div class="tenant-creation-form-price-section-currency">
-          <h4>${dict.tenantsignupsubscription_selectfrequency || dict.tenantsetupsubscription_selectfrequency || 'Frequency'}</h4>
-          <div class="toggle-button-group">
-            <button
-              class="toggle-button ${this.state.priceTab === 'month' ? 'active' : ''}"
-              onclick="tenantWizardWithCredentials.setPriceTab('month')"
-            >
-              ${dict.tenantsignupsubscription_monthlytab || dict.subscription_monthly || 'Monthly'}
-            </button>
-            <button
-              class="toggle-button ${this.state.priceTab === 'year' ? 'active' : ''}"
-              onclick="tenantWizardWithCredentials.setPriceTab('year')"
-            >
-              ${dict.tenantsignupsubscription_yearlytab || dict.subscription_yearly || 'Yearly'}
-            </button>
-          </div>
-        </div>
-
-        <form class="tenant-creation-form-price-section-users" onsubmit="return false;">
-          <h4>${dict.tenantsignupsubscription_selectusers || 'Total Admin Users'}</h4>
-          <input
-            type="number"
-            id="total-admin-users-input"
-            class="wizard-form-input"
-            placeholder="${dict.tenantsignupsubscription_userslabel || 'Number of users'}"
-            value="${this.state.totalAdminUsers || ''}"
-            min="0"
-          />
-          <div class="wizard-form-error" id="users-error"></div>
-        </form>
-
-        <div class="tenant-creation-form-price-section-price">
-          <h4>${dict.tenantsignupsubscription_selectprice || 'Plan preference'}</h4>
-          <div class="tenant-creation-form-price-section-price-list">
-            ${usersPricesToShow.length > 0 ? usersPricesToShow.map(price => {
-              const dictPrice = this.getDictionaryPrice(price.id);
-              if (!dictPrice) return '';
-              
-              const isSelected = this.state.selectedPrice?.id === price.id;
-              const currencyObj = this.state.currencies.find(c => c && c.currency && c.currency.toLowerCase() === price.currency?.toLowerCase());
-              const currencySymbol = currencyObj?.symbol || (price.currency === 'usd' ? '$' : price.currency === 'cad' ? 'C$' : '');
-              const amount = price.tiers && price.tiers.length > 0 ? price.tiers[0].flat_amount : price.amount;
-              const formattedAmount = (amount / 100).toFixed(2);
-              const listPrice = dictPrice.listPricePerUnit ? (dictPrice.listPricePerUnit / 100).toFixed(2) : null;
-              
-              return `
-                <div 
-                  class="app-tenant-creation-form-price-card ${isSelected ? 'selected' : ''}"
-                  onclick="tenantWizardWithCredentials.selectPrice('${price.id}')"
-                >
-                  <div class="selectable-price-card ${isSelected ? 'active' : ''}">
-                    <div class="selectable-price-card-content">
-                      <div class="selectable-price-card-name">${dictPrice.name}</div>
-                      <div class="selectable-price-card-price">
-                        ${listPrice ? `<span class="strikethrough">${currencySymbol}${listPrice}</span>` : ''}
-                        <span>${currencySymbol}${formattedAmount}</span>
-                        <span class="selectable-price-card-currency">${currencyObj?.isoLabel || price.currency?.toUpperCase() || ''}</span>
-                        <span class="selectable-price-card-unit">/${price.interval === 'month' ? 'user/month' : 'user/year'}</span>
-                      </div>
-                    </div>
-                    ${isSelected ? '<div class="selectable-price-card-checkmark">✓</div>' : ''}
-                  </div>
-                </div>
-              `;
-            }).filter(html => html !== '').join('') : ''}
-          </div>
-        </div>
+      <div class="wizard-form-group">
+        <label class="wizard-form-label">${dict.tenantsignupsubscription_selectusers || 'Total Admin Users'}</label>
+        <input
+          type="number"
+          id="total-admin-users-input"
+          class="wizard-form-input"
+          placeholder="${dict.tenantsignupsubscription_userslabel || 'Number of users'}"
+          value="${this.state.totalAdminUsers || ''}"
+          min="0"
+        />
+        <div class="wizard-form-error" id="users-error"></div>
       </div>
     `;
   }
@@ -1175,12 +1089,12 @@ class TenantCreationWizardWithCredentials {
         regionSelect.addEventListener('change', (e) => {
           this.state.region = e.target.value;
           this.clearError('region-error');
+          this.syncCurrencyFromRegion();
+          this.applyDefaultSubscriptionSelection();
+          this.render();
         });
       }
-    }
 
-    // Step 2 listeners
-    if (this.state.currentStep === 1) {
       const usersInput = document.getElementById('total-admin-users-input');
       if (usersInput) {
         usersInput.addEventListener('input', (e) => {
@@ -1200,8 +1114,8 @@ class TenantCreationWizardWithCredentials {
       }
     }
 
-    // Step 3 listeners - Initialize Stripe Elements
-    if (this.state.currentStep === 2) {
+    // Payment step — Initialize Stripe Elements
+    if (this.state.currentStep === 1 && !this.state.skipPayment) {
       const cardholderNameInput = document.getElementById('cardholder-name-input');
       if (cardholderNameInput) {
         cardholderNameInput.addEventListener('input', (e) => {
@@ -1272,6 +1186,11 @@ class TenantCreationWizardWithCredentials {
       isValid = false;
     }
 
+    if (!this.state.totalAdminUsers || this.state.totalAdminUsers < 1) {
+      this.showError('users-error', dict.tenantsignupsubscription_usersrequired || 'Please enter the number of admin users');
+      isValid = false;
+    }
+
     return isValid;
   }
 
@@ -1309,38 +1228,33 @@ class TenantCreationWizardWithCredentials {
     const dict = this.state.dictionary || {};
     
     if (this.state.currentStep === 0) {
-      // Step 1: Validate business info
       if (!this.validateStep1()) {
         this.state.validationError = dict.globalparams_fillrequiredfields || 'Please fill in all required fields';
         this.render();
         return;
       }
-      
-      // Always go to subscription step
-      this.state.currentStep = 1;
-    } else if (this.state.currentStep === 1) {
-      // Step 2: Subscription (always shown)
+      this.syncCurrencyFromRegion();
+      this.applyDefaultSubscriptionSelection();
       if (!this.state.selectedPrice) {
         this.state.validationError = dict.tenantsetupsubscription_selectplan || 'Please select a subscription plan';
         this.render();
         return;
       }
-      if (!this.state.totalAdminUsers || this.state.totalAdminUsers < 1) {
-        this.state.validationError = dict.tenantsignupsubscription_usersrequired || 'Please enter the number of admin users';
+      if (this.state.skipPayment) {
+        this.state.currentStep = 1;
+        this.state.validationError = null;
         this.render();
+        this.attachListeners();
         return;
       }
-      
-      // If payment step is skipped, go directly to summary
-      if (this.state.skipPayment) {
-        this.state.currentStep = 2; // Summary step
-      } else {
-        this.state.currentStep = 2; // Payment step
-      }
+      this.state.currentStep = 1;
+      this.state.validationError = null;
       this.render();
       this.attachListeners();
-    } else if (this.state.currentStep === 2 && !this.state.skipPayment) {
-      // Step 3: Payment (only if not skipped)
+      return;
+    }
+
+    if (this.state.currentStep === 1 && !this.state.skipPayment) {
       if (!this.state.selectedPaymentMethod && !this.state.stripePublicKey) {
         this.state.validationError = dict.paymentdetails_selectpaymentmethod || 'Please select or add a payment method';
         this.render();
@@ -1381,12 +1295,14 @@ class TenantCreationWizardWithCredentials {
         this.state.paymentMethodToken = pmId;
       }
       
-      this.state.currentStep = 3; // Summary step
+      this.state.currentStep = 2;
       this.render();
       this.attachListeners();
-    } else if ((this.state.skipPayment && this.state.currentStep === 2) || 
-               (!this.state.skipPayment && this.state.currentStep === 3)) {
-      // Final step: create tenant using Angular API flow
+      return;
+    }
+
+    if ((this.state.skipPayment && this.state.currentStep === 1) ||
+        (!this.state.skipPayment && this.state.currentStep === 2)) {
       try {
         await this.createTenant();
       } catch (error) {
@@ -1404,12 +1320,7 @@ class TenantCreationWizardWithCredentials {
 
   previousStep() {
     if (this.state.currentStep > 0) {
-      // If skipping payment and on summary (step 2), go back to subscription (step 1)
-      if (this.state.skipPayment && this.state.currentStep === 2) {
-        this.state.currentStep = 1;
-      } else {
-        this.state.currentStep--;
-      }
+      this.state.currentStep--;
       this.state.validationError = null;
       this.render();
     }
