@@ -879,7 +879,7 @@ class TenantCreationWizardWithCredentials {
               <div class="payment-method-info">
                 <div>
                   <strong>${pm.card?.brand || (dict.paymentdetails_card || 'Card')} •••• ${pm.card?.last4 || ''}</strong>
-                  <div class="payment-method-details">${dict.paymentdetails_expires || 'Expires'} ${pm.card?.expMonth}/${pm.card?.expYear}</div>
+                  <div class="payment-method-details">${this.formatCardExpiryLine(dict, pm.card)}</div>
                 </div>
                 ${this.state.selectedPaymentMethod?.id === pm.id ? '<span>✓</span>' : ''}
               </div>
@@ -992,7 +992,7 @@ class TenantCreationWizardWithCredentials {
         <h4>${dict.paymentdetails_selectpaymentmethod || 'Payment Method'}</h4>
         <div class="payment-method-display">
           <strong>${this.state.selectedPaymentMethod.card?.brand || (dict.paymentdetails_card || 'Card')} •••• ${this.state.selectedPaymentMethod.card?.last4 || ''}</strong>
-          <div class="payment-method-details">${dict.paymentdetails_expires || 'Expires'} ${this.state.selectedPaymentMethod.card?.expMonth}/${this.state.selectedPaymentMethod.card?.expYear}</div>
+          <div class="payment-method-details">${this.formatCardExpiryLine(dict, this.state.selectedPaymentMethod.card)}</div>
         </div>
       </div>
     ` : '';
@@ -1691,6 +1691,21 @@ class TenantCreationWizardWithCredentials {
   }
 
   // Helper methods
+  /** Stripe REST uses exp_month/exp_year; some clients use expMonth/expYear. */
+  formatCardExpiry(card) {
+    if (!card) return '';
+    const month = card.exp_month ?? card.expMonth;
+    const year = card.exp_year ?? card.expYear;
+    if (month == null || year == null) return '';
+    return `${String(month).padStart(2, '0')}/${year}`;
+  }
+
+  formatCardExpiryLine(dict, card) {
+    const exp = this.formatCardExpiry(card);
+    if (!exp) return '';
+    return `${dict.paymentdetails_expires || 'Expires'} ${exp}`;
+  }
+
   getCountryName(countryCode) {
     const countries = {
       'US': 'United States',
