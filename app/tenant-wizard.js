@@ -233,7 +233,7 @@ class TenantCreationWizard {
       if (response.ok) {
         const data = await response.json();
         this.state.dictionary = data;
-        this.state.databaseRegions = data.collections?.databaseregions || [];
+        this.state.databaseRegions = this.mergeDictionaryDatabaseRegions(data);
         // Filter currencies - match Angular's dicCurrenciesSelector (filter by enabled)
         const rawCurrencies = data.collections?.currencies || [];
         this.state.currencies = Array.isArray(rawCurrencies) 
@@ -279,21 +279,59 @@ class TenantCreationWizard {
   }
 
   /**
-   * CMS may use several spellings for the tenant DB region id; values may be non-string.
+   * Merge all CMS shapes that carry database region rows (tenant data region, not payment).
+   */
+  mergeDictionaryDatabaseRegions(data) {
+    const col = data?.collections || {};
+    const a = col.databaseregions;
+    const b = col.databaseRegions;
+    const parts = [];
+    if (Array.isArray(a)) parts.push(...a);
+    if (Array.isArray(b)) parts.push(...b);
+    return parts;
+  }
+
+  /**
+   * Resolve option value / API region: CMS uses many keys; rows may be plain strings.
+   * Payment currency is separate — this must list every tenant region row that exists.
    */
   getRegionDatabaseregion(region) {
-    if (!region) return '';
-    const id =
-      region.databaseregion ??
-      region.databaseRegion ??
-      region.DatabaseRegion ??
-      region.dataBaseRegion ??
-      region.code ??
-      region.regionCode;
-    if (id == null) return '';
-    const s = String(id).trim();
-    if (!s || s === 'undefined' || s === 'null') return '';
-    return s;
+    if (region == null || region === '') return '';
+    if (typeof region === 'string') {
+      const s = region.trim();
+      if (!s || s === 'undefined' || s === 'null') return '';
+      return s;
+    }
+    const tryVal = (v) => {
+      if (v == null) return '';
+      const s = String(v).trim();
+      if (!s || s === 'undefined' || s === 'null') return '';
+      return s;
+    };
+    const primary =
+      tryVal(region.databaseregion) ||
+      tryVal(region.databaseRegion) ||
+      tryVal(region.DatabaseRegion) ||
+      tryVal(region.dataBaseRegion) ||
+      tryVal(region.data_base_region) ||
+      tryVal(region.regionKey) ||
+      tryVal(region.slug) ||
+      tryVal(region.value) ||
+      tryVal(region.regionId);
+    if (primary) return primary;
+    if (region._id != null) {
+      const id = tryVal(region._id);
+      if (id) return id;
+    }
+    const code = tryVal(region.code) || tryVal(region.regionCode);
+    if (code) return code;
+    const cc = this.getRegionCountryCode(region);
+    if (cc && /^[A-Za-z]{2}$/.test(cc)) return cc.toUpperCase();
+    if (region.id != null && region.id !== region._id) {
+      const id = tryVal(region.id);
+      if (id) return id;
+    }
+    return '';
   }
 
   getRegionCountryCode(region) {
@@ -304,10 +342,41 @@ class TenantCreationWizard {
     return t.length ? t : undefined;
   }
 
+  /**
+   * Unique <select> values (handles duplicate slugs in CMS) — use for validation and currency mapping.
+   */
+  buildRegionSelectOptions() {
+    const rows = this.state.databaseRegions || [];
+    const seen = new Set();
+    const out = [];
+    rows.forEach((region, index) => {
+      let v = this.getRegionDatabaseregion(region);
+      if (!v) return;
+      if (seen.has(v)) {
+        const alt = region._id != null ? String(region._id).trim() : '';
+        v = alt && !seen.has(alt) ? alt : `${v}#${index}`;
+      }
+      let guard = 0;
+      while (seen.has(v) && guard < 20) {
+        v = `${v}_${index}_${guard}`;
+        guard += 1;
+      }
+      seen.add(v);
+      out.push({ value: v, region });
+    });
+    return out;
+  }
+
+  findRegionRowBySelectValue(selectValue) {
+    const id = String(selectValue || '').trim();
+    if (!id) return undefined;
+    return this.buildRegionSelectOptions().find(o => o.value === id)?.region;
+  }
+
   isKnownDatabaseRegion(regionId) {
     const id = String(regionId || '').trim();
     if (!id) return false;
-    return this.state.databaseRegions.some(r => this.getRegionDatabaseregion(r) === id);
+    return this.buildRegionSelectOptions().some(o => o.value === id);
   }
 
   syncRegionFromSelect() {
@@ -324,7 +393,7 @@ class TenantCreationWizard {
   async loadRegions() {
     const regions = this.state.databaseRegions || [];
     if (!regions.length) return;
-    const knownIds = regions.map(r => this.getRegionDatabaseregion(r)).filter(Boolean);
+    const knownIds = this.buildRegionSelectOptions().map(o => o.value);
     const firstId = knownIds[0] || '';
     const current = String(this.state.region ?? '').trim();
     if (!current || !knownIds.includes(current)) {
@@ -359,9 +428,7 @@ class TenantCreationWizard {
       this.updatePriceLists();
       return;
     }
-    const regionRow = this.state.databaseRegions.find(
-      r => this.getRegionDatabaseregion(r) === String(this.state.region || '').trim()
-    );
+    const regionRow = this.findRegionRowBySelectValue(this.state.region);
     const countryCode = regionRow ? this.getRegionCountryCode(regionRow) : undefined;
     let next;
     if (countryCode === 'CA' && validCurrencies.some(c => c.currency.toLowerCase() === 'cad')) {
@@ -657,9 +724,7 @@ class TenantCreationWizard {
         <label class="wizard-form-label">${dict.tenantsetupname_tenantregion || 'Region'}</label>
         <select class="wizard-form-select" id="region-select">
           <option value="">${dict.tenantsetupname_tenantregionplaceholder || 'Select region'}</option>
-          ${this.state.databaseRegions.map(region => {
-            const rid = this.getRegionDatabaseregion(region);
-            if (!rid) return '';
+          ${this.buildRegionSelectOptions().map(({ value: rid, region }) => {
             const sel = String(this.state.region || '').trim() === rid ? 'selected' : '';
             const label =
               this.getCountryName(this.getRegionCountryCode(region)) || rid;
@@ -1818,9 +1883,7 @@ class TenantCreationWizard {
             <p><strong>Business Name:</strong> ${this.state.tenantName}</p>
             <p><strong>Domain:</strong> ${this.state.tenantDomain}.sidedrawer.com</p>
             <p><strong>Region:</strong> ${(() => {
-              const regionObj = this.state.databaseRegions.find(
-                r => this.getRegionDatabaseregion(r) === String(this.state.region || '').trim()
-              );
+              const regionObj = this.findRegionRowBySelectValue(this.state.region);
               return regionObj ? this.getCountryName(this.getRegionCountryCode(regionObj)) : this.state.region;
             })()}</p>
             <p><strong>Subscription:</strong> ${this.state.selectedPrice?.id}</p>
