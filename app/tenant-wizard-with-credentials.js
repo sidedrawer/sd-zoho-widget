@@ -177,7 +177,7 @@ class TenantCreationWizardWithCredentials {
       // Step 2: Subscription
       selectedPrice: null,
       currency: null,
-      priceTab: 'month',
+      priceTab: 'year',
       prices: [],
       monthlyPrices: [],
       yearlyPrices: [],
@@ -275,7 +275,10 @@ class TenantCreationWizardWithCredentials {
       console.log('📡 Loading Stripe public key...');
       await this.loadStripePublicKey();
       console.log('✅ Stripe public key loaded');
-      
+
+      this.syncCurrencyFromRegion();
+      this.applyDefaultSubscriptionSelection();
+
       console.log('✅ Phase 1 complete - all initial data loaded');
       this.state.loading = false;
       
@@ -476,19 +479,70 @@ class TenantCreationWizardWithCredentials {
   }
 
   async loadCurrencies() {
-    if (this.state.currencies.length > 0 && !this.state.currency) {
-      const validCurrencies = this.state.currencies.filter(c => c && c.currency && c.enabled);
-      
-      if (validCurrencies.length > 0) {
-        const usdCurrency = validCurrencies.find(c => c.currency && c.currency.toLowerCase() === 'usd');
-        this.state.currency = usdCurrency 
-          ? usdCurrency.currency.toLowerCase() 
-          : validCurrencies[0].currency.toLowerCase();
-        
-        if (this.state.prices.length > 0) {
-          this.updatePriceLists();
-        }
+    if (this.state.currencies.length > 0) {
+      this.syncCurrencyFromRegion();
+    }
+  }
+
+  getPriceUnitAmount(price) {
+    if (!price) return 0;
+    if (price.tiers && price.tiers.length > 0) {
+      return price.tiers[0].flat_amount ?? 0;
+    }
+    return price.amount ?? 0;
+  }
+
+  syncCurrencyFromRegion() {
+    const validCurrencies = this.state.currencies.filter(c => c && c.currency && c.enabled);
+    if (validCurrencies.length === 0) {
+      this.state.currency = null;
+      this.updatePriceLists();
+      return;
+    }
+    const regionRow = this.state.databaseRegions.find(r => r.databaseregion === this.state.region);
+    const countryCode = regionRow?.countrycode;
+    let next;
+    if (countryCode === 'CA' && validCurrencies.some(c => c.currency.toLowerCase() === 'cad')) {
+      next = 'cad';
+    } else if (countryCode === 'US' && validCurrencies.some(c => c.currency.toLowerCase() === 'usd')) {
+      next = 'usd';
+    } else {
+      const usdCurrency = validCurrencies.find(c => c.currency && c.currency.toLowerCase() === 'usd');
+      next = (usdCurrency ? usdCurrency.currency : validCurrencies[0].currency).toLowerCase();
+    }
+    this.state.currency = next;
+    this.updatePriceLists();
+  }
+
+  applyDefaultSubscriptionSelection() {
+    this.state.priceTab = 'year';
+    this.updatePriceLists();
+    const candidates = this.state.yearlyUsersPrices || [];
+    if (candidates.length === 0) {
+      this.state.selectedPrice = null;
+      return;
+    }
+    let chosen = null;
+    for (const price of candidates) {
+      const dp = this.getDictionaryPrice(price.id);
+      if (dp && /business/i.test(dp.name || '')) {
+        chosen = price;
+        break;
       }
+    }
+    if (!chosen) {
+      chosen = candidates.reduce(
+        (best, p) => (this.getPriceUnitAmount(p) > this.getPriceUnitAmount(best) ? p : best),
+        candidates[0]
+      );
+    }
+    this.state.selectedPrice = chosen;
+    const minUsers = parseInt(chosen.metadata?.['product.startingUsers'] || '0', 10);
+    if (this.state.totalAdminUsers < minUsers) {
+      this.state.totalAdminUsers = minUsers;
+    }
+    if (!this.state.totalAdminUsers || this.state.totalAdminUsers < 1) {
+      this.state.totalAdminUsers = Math.max(1, minUsers || 1);
     }
   }
 

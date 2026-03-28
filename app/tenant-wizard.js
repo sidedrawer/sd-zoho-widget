@@ -170,7 +170,7 @@ class TenantCreationWizard {
       // Step 2: Subscription
       selectedPrice: null,
       currency: null,
-      priceTab: 'month', // 'month' or 'year'
+      priceTab: 'year', // 'month' or 'year' (subscription step hidden; default yearly)
       prices: [],
       monthlyPrices: [],
       yearlyPrices: [],
@@ -208,12 +208,13 @@ class TenantCreationWizard {
       // Load regions from dictionary
       await this.loadRegions();
       
-      // Load currencies from dictionary and set default
+      // Load currencies from dictionary and set default from region (CA→CAD, US→USD)
       await this.loadCurrencies();
-      
+      this.applyDefaultSubscriptionSelection();
+
       // Get Stripe public key from backend/config API
       await this.loadStripePublicKey();
-      
+
       // Render wizard
       this.render();
     } catch (error) {
@@ -288,23 +289,77 @@ class TenantCreationWizard {
   }
 
   async loadCurrencies() {
-    // Currencies loaded from dictionary - match Angular's behavior
-    // Set default currency from first enabled currency (matching subscriptions.effects.ts)
-    if (this.state.currencies.length > 0 && !this.state.currency) {
-      const validCurrencies = this.state.currencies.filter(c => c && c.currency && c.enabled);
-      
-      if (validCurrencies.length > 0) {
-        // Set default currency (USD or first available) - matching Angular's SubscriptionsCurrencyChange
-        const usdCurrency = validCurrencies.find(c => c.currency && c.currency.toLowerCase() === 'usd');
-        this.state.currency = usdCurrency 
-          ? usdCurrency.currency.toLowerCase() 
-          : validCurrencies[0].currency.toLowerCase();
-        
-        // Update price lists after setting currency
-        if (this.state.prices.length > 0) {
-          this.updatePriceLists();
-        }
+    if (this.state.currencies.length > 0) {
+      this.syncCurrencyFromRegion();
+    }
+  }
+
+  /** Resolve unit amount in smallest currency unit for comparing tiers. */
+  getPriceUnitAmount(price) {
+    if (!price) return 0;
+    if (price.tiers && price.tiers.length > 0) {
+      return price.tiers[0].flat_amount ?? 0;
+    }
+    return price.amount ?? 0;
+  }
+
+  /**
+   * CA → CAD, US → USD when enabled; otherwise USD preferred or first enabled currency.
+   */
+  syncCurrencyFromRegion() {
+    const validCurrencies = this.state.currencies.filter(c => c && c.currency && c.enabled);
+    if (validCurrencies.length === 0) {
+      this.state.currency = null;
+      this.updatePriceLists();
+      return;
+    }
+    const regionRow = this.state.databaseRegions.find(r => r.databaseregion === this.state.region);
+    const countryCode = regionRow?.countrycode;
+    let next;
+    if (countryCode === 'CA' && validCurrencies.some(c => c.currency.toLowerCase() === 'cad')) {
+      next = 'cad';
+    } else if (countryCode === 'US' && validCurrencies.some(c => c.currency.toLowerCase() === 'usd')) {
+      next = 'usd';
+    } else {
+      const usdCurrency = validCurrencies.find(c => c.currency && c.currency.toLowerCase() === 'usd');
+      next = (usdCurrency ? usdCurrency.currency : validCurrencies[0].currency).toLowerCase();
+    }
+    this.state.currency = next;
+    this.updatePriceLists();
+  }
+
+  /**
+   * Yearly pay-per-user Business: CMS name matches /business/i, else highest unit price among yearly users prices.
+   */
+  applyDefaultSubscriptionSelection() {
+    this.state.priceTab = 'year';
+    this.updatePriceLists();
+    const candidates = this.state.yearlyUsersPrices || [];
+    if (candidates.length === 0) {
+      this.state.selectedPrice = null;
+      return;
+    }
+    let chosen = null;
+    for (const price of candidates) {
+      const dp = this.getDictionaryPrice(price.id);
+      if (dp && /business/i.test(dp.name || '')) {
+        chosen = price;
+        break;
       }
+    }
+    if (!chosen) {
+      chosen = candidates.reduce(
+        (best, p) => (this.getPriceUnitAmount(p) > this.getPriceUnitAmount(best) ? p : best),
+        candidates[0]
+      );
+    }
+    this.state.selectedPrice = chosen;
+    const minUsers = parseInt(chosen.metadata?.['product.startingUsers'] || '0', 10);
+    if (this.state.totalAdminUsers < minUsers) {
+      this.state.totalAdminUsers = minUsers;
+    }
+    if (!this.state.totalAdminUsers || this.state.totalAdminUsers < 1) {
+      this.state.totalAdminUsers = Math.max(1, minUsers || 1);
     }
   }
 
@@ -444,11 +499,11 @@ class TenantCreationWizard {
           </div>
           <div class="wizard-step ${this.state.currentStep === 1 ? 'active' : this.state.currentStep > 1 ? 'completed' : ''}">
             <div class="wizard-step-circle">${this.state.currentStep > 1 ? '✓' : '2'}</div>
-            <div class="wizard-step-label">${this.getDictionaryValue('tenantsetupsubscription_steptitle') || 'Subscription'}</div>
+            <div class="wizard-step-label">${this.getDictionaryValue('tenantsetuppayment_steptitle') || 'Payment'}</div>
           </div>
           <div class="wizard-step ${this.state.currentStep === 2 ? 'active' : this.state.currentStep > 2 ? 'completed' : ''}">
             <div class="wizard-step-circle">${this.state.currentStep > 2 ? '✓' : '3'}</div>
-            <div class="wizard-step-label">${this.getDictionaryValue('tenantsetuppayment_steptitle') || 'Payment'}</div>
+            <div class="wizard-step-label">${this.getDictionaryValue('tenantsignupsummary_steptitle') || 'Summary'}</div>
           </div>
         </div>
 
@@ -459,7 +514,7 @@ class TenantCreationWizard {
         <div class="wizard-footer">
           ${this.state.currentStep > 0 ? `<button class="btn" onclick="tenantWizard.previousStep()">${this.getDictionaryValue('globalparams_back') || 'Back'}</button>` : '<div></div>'}
           <button class="btn btn-success" onclick="if(window.tenantWizard){window.tenantWizard.nextStep();}else{console.error('tenantWizard not found');}" ${this.state.loading ? 'disabled' : ''} id="wizard-next-button">
-            ${this.state.currentStep === 3 
+            ${this.state.currentStep === 2 
               ? (this.getDictionaryValue('tenantsetuppayment_primarybutton') || 'Create Account')
               : (this.getDictionaryValue('globalparams_next') || 'Next')}
           </button>
@@ -475,10 +530,8 @@ class TenantCreationWizard {
     if (this.state.currentStep === 0) {
       return this.renderStep1();
     } else if (this.state.currentStep === 1) {
-      return this.renderStep2();
-    } else if (this.state.currentStep === 2) {
       return this.renderStep3();
-    } else if (this.state.currentStep === 3) {
+    } else if (this.state.currentStep === 2) {
       return this.renderStep4();
     }
     return '';
@@ -564,104 +617,18 @@ class TenantCreationWizard {
         </select>
         <div class="wizard-form-error" id="region-error"></div>
       </div>
-    `;
-  }
 
-  renderStep2() {
-    const dict = this.state.dictionary || {};
-    // Ensure price lists are updated before rendering
-    this.updatePriceLists();
-    const usersPricesToShow = this.state.priceTab === 'month' ? this.state.monthlyUsersPrices : this.state.yearlyUsersPrices;
-    const availableCurrencies = this.state.currencies.filter(c => c && c.currency && c.enabled);
-    
-    return `
-      ${this.state.validationError ? `<div class="validation-error">${this.state.validationError}</div>` : ''}
-      
-      <p class="mb-24 text-gray">${dict.tenantsignupsubscription_description || dict.tenantsetupsubscription_description || 'Select your subscription plan'}</p>
-      
-      <div class="tenant-creation-form-price-section">
-        <div class="tenant-creation-form-price-section-currency">
-          <h4>${dict.tenantsignupsubscription_selectcurrency || dict.tenantsetupsubscription_selectcurrency || 'Currency'}</h4>
-          <div class="toggle-button-group">
-            ${availableCurrencies.map(currency => `
-              <button
-                class="toggle-button ${this.state.currency && this.state.currency.toLowerCase() === currency.currency.toLowerCase() ? 'active' : ''}"
-                onclick="tenantWizard.selectCurrency('${currency.currency}')"
-              >
-                ${currency.symbol} ${currency.isoLabel}
-              </button>
-            `).join('')}
-          </div>
-        </div>
-
-        <div class="tenant-creation-form-price-section-currency">
-          <h4>${dict.tenantsignupsubscription_selectfrequency || dict.tenantsetupsubscription_selectfrequency || 'Frequency'}</h4>
-          <div class="toggle-button-group">
-            <button
-              class="toggle-button ${this.state.priceTab === 'month' ? 'active' : ''}"
-              onclick="tenantWizard.setPriceTab('month')"
-            >
-              ${dict.tenantsignupsubscription_monthlytab || dict.subscription_monthly || 'Monthly'}
-            </button>
-            <button
-              class="toggle-button ${this.state.priceTab === 'year' ? 'active' : ''}"
-              onclick="tenantWizard.setPriceTab('year')"
-            >
-              ${dict.tenantsignupsubscription_yearlytab || dict.subscription_yearly || 'Yearly'}
-            </button>
-          </div>
-        </div>
-
-        <form class="tenant-creation-form-price-section-users" onsubmit="return false;">
-          <h4>${dict.tenantsignupsubscription_selectusers || 'Total Admin Users'}</h4>
-          <input
-            type="number"
-            id="total-admin-users-input"
-            class="wizard-form-input"
-            placeholder="${dict.tenantsignupsubscription_userslabel || 'Number of users'}"
-            value="${this.state.totalAdminUsers || ''}"
-            min="0"
-            class="wizard-form-input"
-          />
-          <div class="wizard-form-error" id="users-error"></div>
-        </form>
-
-        <div class="tenant-creation-form-price-section-price">
-          <h4>${dict.tenantsignupsubscription_selectprice || 'Plan preference'}</h4>
-          <div class="tenant-creation-form-price-section-price-list">
-            ${usersPricesToShow.length > 0 ? usersPricesToShow.map(price => {
-              const dictPrice = this.getDictionaryPrice(price.id);
-              if (!dictPrice) return '';
-              
-              const isSelected = this.state.selectedPrice?.id === price.id;
-              const currencyObj = this.state.currencies.find(c => c && c.currency && c.currency.toLowerCase() === price.currency?.toLowerCase());
-              const currencySymbol = currencyObj?.symbol || (price.currency === 'usd' ? '$' : price.currency === 'cad' ? 'C$' : '');
-              const amount = price.tiers && price.tiers.length > 0 ? price.tiers[0].flat_amount : price.amount;
-              const formattedAmount = (amount / 100).toFixed(2);
-              const listPrice = dictPrice.listPricePerUnit ? (dictPrice.listPricePerUnit / 100).toFixed(2) : null;
-              
-              return `
-                <div 
-                  class="app-tenant-creation-form-price-card ${isSelected ? 'selected' : ''}"
-                  onclick="tenantWizard.selectPrice('${price.id}')"
-                >
-                  <div class="selectable-price-card ${isSelected ? 'active' : ''}">
-                    <div class="selectable-price-card-content">
-                      <div class="selectable-price-card-name">${dictPrice.name}</div>
-                      <div class="selectable-price-card-price">
-                        ${listPrice ? `<span class="strikethrough">${currencySymbol}${listPrice}</span>` : ''}
-                        <span>${currencySymbol}${formattedAmount}</span>
-                        <span class="selectable-price-card-currency">${currencyObj?.isoLabel || price.currency?.toUpperCase() || ''}</span>
-                        <span class="selectable-price-card-unit">/${price.interval === 'month' ? 'user/month' : 'user/year'}</span>
-                      </div>
-                    </div>
-                    ${isSelected ? '<div class="selectable-price-card-checkmark">✓</div>' : ''}
-                  </div>
-                </div>
-              `;
-            }).filter(html => html !== '').join('') : ''}
-          </div>
-        </div>
+      <div class="wizard-form-group">
+        <label class="wizard-form-label">${dict.tenantsignupsubscription_selectusers || 'Total Admin Users'}</label>
+        <input
+          type="number"
+          id="total-admin-users-input"
+          class="wizard-form-input"
+          placeholder="${dict.tenantsignupsubscription_userslabel || 'Number of users'}"
+          value="${this.state.totalAdminUsers || ''}"
+          min="0"
+        />
+        <div class="wizard-form-error" id="users-error"></div>
       </div>
     `;
   }
@@ -971,12 +938,12 @@ class TenantCreationWizard {
         regionSelect.addEventListener('change', (e) => {
           this.state.region = e.target.value;
           this.clearError('region-error');
+          this.syncCurrencyFromRegion();
+          this.applyDefaultSubscriptionSelection();
+          this.render();
         });
       }
-    }
 
-    // Step 2 listeners
-    if (this.state.currentStep === 1) {
       const usersInput = document.getElementById('total-admin-users-input');
       if (usersInput) {
         usersInput.addEventListener('input', (e) => {
@@ -996,8 +963,8 @@ class TenantCreationWizard {
       }
     }
 
-    // Step 3 listeners - Initialize Stripe Elements
-    if (this.state.currentStep === 2) {
+    // Payment step — Initialize Stripe Elements
+    if (this.state.currentStep === 1) {
       const cardholderNameInput = document.getElementById('cardholder-name-input');
       if (cardholderNameInput) {
         cardholderNameInput.addEventListener('input', (e) => {
@@ -1056,8 +1023,8 @@ class TenantCreationWizard {
       }
     }
 
-    // Step 4 (Summary) listeners - Add direct event listener to button
-    if (this.state.currentStep === 3) {
+    // Summary step — direct handler on primary button (avoids double-submit with inline onclick)
+    if (this.state.currentStep === 2) {
       const nextButton = document.getElementById('wizard-next-button');
       if (nextButton) {
         // Remove any existing listeners
@@ -1130,6 +1097,11 @@ class TenantCreationWizard {
       isValid = false;
     }
 
+    if (!this.state.totalAdminUsers || this.state.totalAdminUsers < 1) {
+      this.showError('users-error', dict.tenantsignupsubscription_usersrequired || 'Please enter the number of admin users');
+      isValid = false;
+    }
+
     return isValid;
   }
 
@@ -1174,24 +1146,20 @@ class TenantCreationWizard {
         this.render();
         return;
       }
-      this.state.currentStep = 1;
-    } else if (this.state.currentStep === 1) {
+      this.syncCurrencyFromRegion();
+      this.applyDefaultSubscriptionSelection();
       if (!this.state.selectedPrice) {
         this.state.validationError = dict.tenantsetupsubscription_selectplan || 'Please select a subscription plan';
         this.render();
         return;
       }
-      if (!this.state.totalAdminUsers || this.state.totalAdminUsers < 1) {
-        this.state.validationError = dict.tenantsignupsubscription_usersrequired || 'Please enter the number of admin users';
-        this.render();
-        return;
-      }
-      this.state.currentStep = 2;
+      this.state.currentStep = 1;
       await this.loadPaymentMethods();
-      // Re-render to show step 3 and initialize Stripe Elements
+      this.state.validationError = null;
       this.render();
       this.attachListeners();
-    } else if (this.state.currentStep === 2) {
+      return;
+    } else if (this.state.currentStep === 1) {
       // Validate payment method
       if (!this.state.selectedPaymentMethod && !this.state.stripePublicKey) {
         this.state.validationError = dict.paymentdetails_selectpaymentmethod || 'Please select or add a payment method';
@@ -1236,15 +1204,16 @@ class TenantCreationWizard {
         this.state.paymentMethodToken = pmId;
       }
       
-      this.state.currentStep = 3;
+      this.state.currentStep = 2;
       this.render();
       this.attachListeners();
-    } else if (this.state.currentStep === 3) {
+      return;
+    } else if (this.state.currentStep === 2) {
       // Final step: create tenant
       try {
         await this.createTenant();
       } catch (error) {
-        console.error('❌ Error in nextStep (step 3):', error);
+        console.error('❌ Error in nextStep (summary):', error);
         const dict = this.state.dictionary || {};
         this.state.validationError = error.message || (dict.globalparams_error || 'Failed to create account');
         this.render();
