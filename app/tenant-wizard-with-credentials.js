@@ -207,7 +207,11 @@ class TenantCreationWizardWithCredentials {
       // UI State
       loading: false,
       error: null,
-      validationError: null
+      validationError: null,
+      // Fixed price from query param stripe_price
+      fixedStripePriceId: null,
+      // Coupon from query param coupon_id
+      couponId: null
     };
   }
 
@@ -228,6 +232,25 @@ class TenantCreationWizardWithCredentials {
 
     this.state.accessToken = accessToken;
     this.state.openId = this.extractOpenIdFromToken(accessToken);
+
+    // Read stripe_price query param
+    const urlParams = new URLSearchParams(window.location.search);
+    const stripePriceParam = urlParams.get('stripe_price') || sessionStorage.getItem('sd_config_stripe_price') || null;
+    if (stripePriceParam) {
+      if (!urlParams.has('code') && !urlParams.has('error')) {
+        sessionStorage.setItem('sd_config_stripe_price', stripePriceParam);
+      }
+      this.state.fixedStripePriceId = stripePriceParam;
+    }
+
+    // Read coupon_id query param
+    const couponIdParam = urlParams.get('coupon_id') || sessionStorage.getItem('sd_config_coupon_id') || null;
+    if (couponIdParam) {
+      if (!urlParams.has('code') && !urlParams.has('error')) {
+        sessionStorage.setItem('sd_config_coupon_id', couponIdParam);
+      }
+      this.state.couponId = couponIdParam;
+    }
 
     try {
       this.state.loading = true;
@@ -280,7 +303,11 @@ class TenantCreationWizardWithCredentials {
       console.log('✅ Stripe public key loaded');
 
       this.syncWizardCurrency();
-      this.applyDefaultSubscriptionSelection();
+      if (this.state.fixedStripePriceId) {
+        await this.loadFixedStripePrice();
+      } else {
+        this.applyDefaultSubscriptionSelection();
+      }
 
       console.log('✅ Phase 1 complete - all initial data loaded');
       this.state.loading = false;
@@ -469,6 +496,54 @@ class TenantCreationWizardWithCredentials {
     } catch (error) {
       console.error('❌ Error loading prices:', error);
       throw error;
+    }
+  }
+
+  /**
+   * When stripe_price query param is present, resolve that specific price.
+   * Looks it up in the already-loaded prices list first; falls back to a direct
+   * GET /subscriptions/prices/:id call so inactive or unlisted prices still work.
+   */
+  async loadFixedStripePrice() {
+    const priceId = this.state.fixedStripePriceId;
+    if (!priceId) return;
+
+    let price = (this.state.prices || []).find(p => p.id === priceId);
+
+    if (!price) {
+      try {
+        const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
+        const apiBase = isSandbox
+          ? 'https://api-sbx.sidedrawersbx.com/api/v1'
+          : 'https://api.sidedrawer.com/api/v1';
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.state.accessToken}`
+        };
+        const response = await fetch(`${apiBase}/subscriptions/prices/${encodeURIComponent(priceId)}`, { headers });
+        if (response.ok) {
+          price = await response.json();
+        } else {
+          console.warn(`⚠ stripe_price "${priceId}" not found (${response.status})`);
+        }
+      } catch (e) {
+        console.error('❌ Error fetching fixed stripe price:', e);
+      }
+    }
+
+    if (price) {
+      this.state.selectedPrice = price;
+      if (price.currency) {
+        this.state.currency = price.currency.toLowerCase();
+        this.updatePriceLists();
+      }
+      const minUsers = parseInt(price.metadata?.['product.startingUsers'] || '0', 10);
+      if (!this.state.totalAdminUsers || this.state.totalAdminUsers < Math.max(1, minUsers)) {
+        this.state.totalAdminUsers = Math.max(1, minUsers || 1);
+      }
+    } else {
+      console.warn(`⚠ Falling back to default price selection (stripe_price "${priceId}" could not be loaded)`);
+      this.applyDefaultSubscriptionSelection();
     }
   }
 
@@ -804,16 +879,16 @@ class TenantCreationWizardWithCredentials {
           this.state.stripePublicKey = data.publicKey || data.stripePublicKey || data.key || null;
           console.log(`  ✓ Stripe public key loaded from API`);
         } else {
-          console.warn(`  ⚠ Stripe public key endpoint failed (${response.status}), using fallback`);
-          this.state.stripePublicKey = 'pk_test_DJsfKIOeJStMWElaD8bLc17E';
+          console.error(`  ✗ Stripe public key endpoint failed (${response.status}) — payment step unavailable`);
+          this.state.stripePublicKey = null;
         }
       } catch (e) {
-        console.warn(`  ⚠ Stripe public key fetch error, using fallback:`, e);
-        this.state.stripePublicKey = 'pk_test_DJsfKIOeJStMWElaD8bLc17E';
+        console.error(`  ✗ Stripe public key fetch error — payment step unavailable:`, e);
+        this.state.stripePublicKey = null;
       }
     } catch (error) {
-      console.warn(`  ⚠ Stripe public key error, using fallback:`, error);
-      this.state.stripePublicKey = 'pk_test_DJsfKIOeJStMWElaD8bLc17E';
+      console.error(`  ✗ Stripe public key error — payment step unavailable:`, error);
+      this.state.stripePublicKey = null;
     }
   }
 
@@ -1168,6 +1243,11 @@ class TenantCreationWizardWithCredentials {
       <div class="tenant-creation-form-price-selected-resume">
         <div class="tenant-creation-form-price-selected-resume-title">
           <h2>${dictPrice?.name || this.state.selectedPrice.id}</h2>
+          ${this.state.fixedStripePriceId ? `
+            <div class="tenant-creation-form-price-selected-chip">
+              <p>${dict.tenantsignupsummary_fixedpricelabel || 'Pre-selected plan'}</p>
+            </div>
+          ` : ''}
         </div>
         <p class="tenant-creation-form-price-selected-price">
           ${listPricePerUnit ? `<span class="tenant-creation-form-price-selected-list-price">${currencySymbol}${listPricePerUnit.toFixed(2)}</span>` : ''}
@@ -1758,10 +1838,6 @@ class TenantCreationWizardWithCredentials {
       if (!this.state.selectedPrice?.id) {
         throw new Error('No subscription plan selected');
       }
-      if (!paymentMethodId) {
-        throw new Error('Payment method is required');
-      }
-      
       const signupResponse = await fetch(`${tenantApiBase}/tenant/signup`, {
         method: 'POST',
         headers: {
@@ -1773,10 +1849,10 @@ class TenantCreationWizardWithCredentials {
           tenantName: this.state.tenantName,
           brandCode: this.state.tenantDomain,
           region: this.state.region,
-          startingSideDrawers: this.state.totalAdminUsers || 1,
+          startingQuantity: this.state.totalAdminUsers || 1,
           identityProvider: 'auth0',
           priceId: this.state.selectedPrice.id,
-          paymentMethodId: paymentMethodId
+          ...(this.state.couponId ? { couponId: this.state.couponId } : {})
         })
       });
 

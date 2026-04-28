@@ -193,12 +193,35 @@ class TenantCreationWizard {
       // UI State
       loading: false,
       error: null,
-      validationError: null
+      validationError: null,
+      // Fixed price from query param stripe_price
+      fixedStripePriceId: null,
+      // Coupon from query param coupon_id
+      couponId: null
     };
   }
 
   async init() {
     try {
+      // Read stripe_price query param
+      const urlParams = new URLSearchParams(window.location.search);
+      const stripePriceParam = urlParams.get('stripe_price') || sessionStorage.getItem('sd_config_stripe_price') || null;
+      if (stripePriceParam) {
+        if (!urlParams.has('code') && !urlParams.has('error')) {
+          sessionStorage.setItem('sd_config_stripe_price', stripePriceParam);
+        }
+        this.state.fixedStripePriceId = stripePriceParam;
+      }
+
+      // Read coupon_id query param
+      const couponIdParam = urlParams.get('coupon_id') || sessionStorage.getItem('sd_config_coupon_id') || null;
+      if (couponIdParam) {
+        if (!urlParams.has('code') && !urlParams.has('error')) {
+          sessionStorage.setItem('sd_config_coupon_id', couponIdParam);
+        }
+        this.state.couponId = couponIdParam;
+      }
+
       // Fetch dictionary FIRST (needed for currencies)
       await this.loadDictionary();
       
@@ -210,7 +233,11 @@ class TenantCreationWizard {
       
       // Load currencies from dictionary and set default from region (CA→CAD, US→USD)
       await this.loadCurrencies();
-      this.applyDefaultSubscriptionSelection();
+      if (this.state.fixedStripePriceId) {
+        await this.loadFixedStripePrice();
+      } else {
+        this.applyDefaultSubscriptionSelection();
+      }
 
       // Get Stripe public key from backend/config API
       await this.loadStripePublicKey();
@@ -275,6 +302,57 @@ class TenantCreationWizard {
       }
     } catch (error) {
       throw error;
+    }
+  }
+
+  /**
+   * When stripe_price query param is present, resolve that specific price.
+   * Looks it up in the already-loaded prices list first; falls back to a direct
+   * GET /subscriptions/prices/:id call so inactive or unlisted prices still work.
+   */
+  async loadFixedStripePrice() {
+    const priceId = this.state.fixedStripePriceId;
+    if (!priceId) return;
+
+    // Try to find in already-loaded list first
+    let price = (this.state.prices || []).find(p => p.id === priceId);
+
+    if (!price) {
+      // Fetch individually from backend
+      try {
+        const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
+        const apiBase = isSandbox
+          ? 'https://api-sbx.sidedrawersbx.com/api/v1'
+          : 'https://api.sidedrawer.com/api/v1';
+        const token = await auth.getAccessToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const response = await fetch(`${apiBase}/subscriptions/prices/${encodeURIComponent(priceId)}`, { headers });
+        if (response.ok) {
+          price = await response.json();
+        } else {
+          console.warn(`⚠ stripe_price "${priceId}" not found (${response.status})`);
+        }
+      } catch (e) {
+        console.error('❌ Error fetching fixed stripe price:', e);
+      }
+    }
+
+    if (price) {
+      this.state.selectedPrice = price;
+      // Ensure the price currency is reflected
+      if (price.currency) {
+        this.state.currency = price.currency.toLowerCase();
+        this.updatePriceLists();
+      }
+      const minUsers = parseInt(price.metadata?.['product.startingUsers'] || '0', 10);
+      if (!this.state.totalAdminUsers || this.state.totalAdminUsers < Math.max(1, minUsers)) {
+        this.state.totalAdminUsers = Math.max(1, minUsers || 1);
+      }
+    } else {
+      // Price not found — fall back to default selection
+      console.warn(`⚠ Falling back to default price selection (stripe_price "${priceId}" could not be loaded)`);
+      this.applyDefaultSubscriptionSelection();
     }
   }
 
@@ -521,16 +599,16 @@ class TenantCreationWizard {
           const data = await response.json();
           this.state.stripePublicKey = data.publicKey || data.stripePublicKey || data.key || null;
         } else {
-          // Use default fallback if API is not configured
-          this.state.stripePublicKey = 'pk_test_DLCzCNAdgfdT04sbyI2BfJdM';
+          console.error('Stripe public key endpoint failed:', response.status);
+          this.state.stripePublicKey = null;
         }
       } catch (e) {
-        // Use default fallback if API call fails
-        this.state.stripePublicKey = 'pk_test_DLCzCNAdgfdT04sbyI2BfJdM';
+        console.error('Stripe public key fetch error:', e);
+        this.state.stripePublicKey = null;
       }
     } catch (error) {
-      // Use default fallback on any error
-      this.state.stripePublicKey = 'pk_test_DLCzCNAdgfdT04sbyI2BfJdM';
+      console.error('Stripe public key error:', error);
+      this.state.stripePublicKey = null;
     }
   }
 
@@ -879,6 +957,11 @@ class TenantCreationWizard {
         <div class="tenant-creation-form-price-selected-resume">
           <div class="tenant-creation-form-price-selected-resume-title">
             <h2>${this.state.selectedPrice.id}</h2>
+            ${this.state.fixedStripePriceId ? `
+              <div class="tenant-creation-form-price-selected-chip">
+                <p>${dict.tenantsignupsummary_fixedpricelabel || 'Pre-selected plan'}</p>
+              </div>
+            ` : ''}
           </div>
           <p class="tenant-creation-form-price-selected-price">
             <span>${currencySymbol}${pricePerUnit.toFixed(2)}</span>
@@ -946,6 +1029,11 @@ class TenantCreationWizard {
       <div class="tenant-creation-form-price-selected-resume">
         <div class="tenant-creation-form-price-selected-resume-title">
           <h2>${dictPrice.name}</h2>
+          ${this.state.fixedStripePriceId ? `
+            <div class="tenant-creation-form-price-selected-chip">
+              <p>${dict.tenantsignupsummary_fixedpricelabel || 'Pre-selected plan'}</p>
+            </div>
+          ` : ''}
           ${dictPrice.remark ? `
             <div class="tenant-creation-form-price-selected-chip">
               <p>${dictPrice.remark}</p>
@@ -1836,7 +1924,9 @@ class TenantCreationWizard {
         brandCode: signupData.brandCode,
         region: signupData.region,
         priceId: signupData.priceId,
-        paymentMethodId: signupData.paymentMethodId
+        startingQuantity: this.state.totalAdminUsers || 1,
+        paymentMethodId: signupData.paymentMethodId,
+        ...(this.state.couponId ? { couponId: this.state.couponId } : {})
       };
 
       // Call secure backend signup endpoint

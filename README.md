@@ -45,17 +45,16 @@ The widget is hosted at: `https://sidedrawer.github.io/SideDrawer/app/widget.htm
 4. Set the URL with your credentials:
 
 ```
-https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
+https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
 ```
 
 **Replace:**
 - `YOUR_CLIENT_ID` → Your SideDrawer Client ID
-- `YOUR_CLIENT_SECRET` → Your SideDrawer Client Secret
 - `environment=sandbox` → Use `environment=production` for production
 
 **Example:**
 ```
-https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=AYKueA9CuMXe7fMj8QfJM722F98NwZyA&client_secret=Dwd47Osd6secRvrrfC31ng2oWGGuiwnr55IGm0qRxHsgiDtYSwu8GMEEHKScksTD&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
+https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
 ```
 
 #### 4. Test the Integration
@@ -81,7 +80,7 @@ https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=AYKueA9CuMXe7f
 
 4. Access the widget with URL parameters:
    ```
-   https://127.0.0.1:5001/app/widget.html?client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=https://127.0.0.1:5001/app/widget.html&environment=sandbox
+   https://127.0.0.1:5001/app/widget.html?client_id=YOUR_CLIENT_ID&redirect_uri=https://127.0.0.1:5001/app/widget.html&environment=sandbox
    ```
 
 ## 🎯 How It Works
@@ -92,7 +91,6 @@ The widget uses URL parameters to configure OAuth credentials for each Zoho CRM 
 
 **Required Parameters:**
 - `client_id` - Your SideDrawer OAuth Client ID
-- `client_secret` - Your SideDrawer OAuth Client Secret  
 - `redirect_uri` - The widget URL (usually the same URL without parameters)
 - `environment` - Either `sandbox` or `production`
 
@@ -142,12 +140,12 @@ The widget uses URL parameters to configure OAuth credentials for each Zoho CRM 
 
 **Sandbox Environment:**
 ```
-https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
+https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
 ```
 
 **Production Environment:**
 ```
-https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=production
+https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=production
 ```
 
 ### Environment-Specific OAuth Endpoints
@@ -178,7 +176,7 @@ The `environment` parameter automatically sets:
 **Problem**: Widget shows "Client ID not configured"
 
 **Solution**: 
-1. Ensure your widget URL includes all required parameters: `client_id`, `client_secret`, `redirect_uri`, and `environment`
+1. Ensure your widget URL includes all required parameters: `client_id`, `redirect_uri`, and `environment`
 2. Check for typos in parameter names (case-sensitive)
 3. Clear browser localStorage and reload with correct URL
 
@@ -205,7 +203,7 @@ The `environment` parameter automatically sets:
 **Problem**: Token exchange fails with 401 error
 
 **Solution**:
-1. Verify `client_id` and `client_secret` are correct
+1. Verify `client_id` is correct
 2. Ensure you're using the right environment (sandbox vs production)
 3. Check that PKCE is enabled in your SideDrawer OAuth app
 4. Add `https://sidedrawer.github.io` to "Allowed Web Origins" in Auth0 settings
@@ -259,18 +257,17 @@ Once connected, you can:
 
 ## 🔐 Security Considerations
 
-### URL Parameters and Client Secret
+### URL Parameters
 
-**Important**: This widget uses URL parameters to pass OAuth credentials, including `client_secret`.
+**Required Parameters:**
+- `client_id` — Your SideDrawer OAuth Client ID (public identifier, safe in URLs)
+- `redirect_uri` — The widget URL
+- `environment` — `sandbox` or `production`
 
-**Why this is acceptable for this use case:**
-1. **Zoho CRM Context**: URLs are only accessible to authenticated Zoho CRM users
-2. **No Public Exposure**: Widget URLs are not publicly accessible
-3. **Industry Standard**: Similar to how other Zoho CRM integrations (HeyAdvisor, Cloven) work
-4. **Alternative Would Be Complex**: A backend proxy would add unnecessary complexity
+This widget uses PKCE (Proof Key for Code Exchange), which is a public-client OAuth flow that does **not** require a `client_secret`. No secret should ever be passed in a URL.
 
 **Security Measures in Place:**
-- PKCE (Proof Key for Code Exchange) adds an additional security layer
+- PKCE (Proof Key for Code Exchange) protects the authorization code exchange without needing a client secret
 - Tokens are short-lived and automatically refreshed
 - All OAuth communication uses HTTPS
 - Credentials are stored in browser localStorage (not cookies)
@@ -307,7 +304,7 @@ After extensive testing and iteration, here's what works:
 **✅ GitHub Pages Deployment with URL Parameters**
 
 ```
-https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=XXX&client_secret=XXX&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
+https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
 ```
 
 ### What We Learned
@@ -332,9 +329,8 @@ https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=XXX&client_sec
    - State also carries `clientId` and `redirectUri` for popup context
    - This ensures popup can complete token exchange independently
 
-5. **Security is Acceptable**
-   - URLs are only accessible to authenticated Zoho CRM users
-   - PKCE adds additional security beyond client_secret
+5. **Security**
+   - PKCE (Proof Key for Code Exchange) is used — no `client_secret` required or sent
    - Same approach as other production Zoho integrations
    - Not publicly exposed
 

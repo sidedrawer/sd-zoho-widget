@@ -132,6 +132,15 @@
               return OAUTH_CONFIG.clientId;
             }
             
+            // Priority 4: clientId stored in sdSession from a previous successful session
+            const storedSession = localStorage.getItem('sdSession');
+            if (storedSession) {
+              try {
+                const parsed = JSON.parse(storedSession);
+                if (parsed.clientId) return parsed.clientId;
+              } catch (e) {}
+            }
+            
             return null;
           };
           
@@ -1073,7 +1082,11 @@
             const token = await this.getAccessToken();
             
             // Test API call to SideDrawer tenant endpoint
-            const response = await fetch('https://tenants-gateway-api-sbx.sidedrawersbx.com/api/v1/tenants/tenant/shared', {
+            const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
+            const tenantApi = isSandbox
+              ? 'https://tenants-gateway-api-sbx.sidedrawersbx.com/api/v1/tenants/tenant/shared'
+              : 'https://tenants-gateway-api.sidedrawer.com/api/v1/tenants/tenant/shared';
+            const response = await fetch(tenantApi, {
               headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
@@ -1219,7 +1232,9 @@
             expiresAt: expiresAt,
             tokenType: tokenData.token_type || 'Bearer',
             // Store refresh token in session object too (for consistency with @SidedrawerRelated)
-            refreshToken: refreshTokenToUse || null
+            refreshToken: refreshTokenToUse || null,
+            // Persist clientId so it survives across token refreshes without needing URL params
+            clientId: OAUTH_CONFIG.clientId || null
           };
           
           console.log('💾 Saving session data...');

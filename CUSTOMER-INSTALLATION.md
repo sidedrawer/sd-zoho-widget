@@ -26,9 +26,8 @@
 
 5. Click **Save**
 
-6. **Copy and save** these credentials:
-   - **Client ID** (example: `AYKueA9CuMXe7fMj8QfJM722F98NwZyA`)
-   - **Client Secret** (example: `Dwd47Osd6secRvrrfC31ng2oWGGuiwnr55IGm0qRxHsgiDtYSwu8GMEEHKScksTD`)
+6. **Copy and save** this credential:
+   - **Client ID** (example: `YOUR_CLIENT_ID`)
 
 ### 2. Add Widget to Zoho CRM
 
@@ -44,17 +43,12 @@
 
 **For Sandbox:**
 ```
-https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
+https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
 ```
 
 **For Production:**
 ```
-https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=production
-```
-
-**Example (using sample credentials):**
-```
-https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=AYKueA9CuMXe7fMj8QfJM722F98NwZyA&client_secret=Dwd47Osd6secRvrrfC31ng2oWGGuiwnr55IGm0qRxHsgiDtYSwu8GMEEHKScksTD&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
+https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=production
 ```
 
 5. Click **Save**
@@ -94,7 +88,6 @@ The widget URL includes these configuration parameters:
 | Parameter | Description | Required |
 |-----------|-------------|----------|
 | `client_id` | Your SideDrawer OAuth Client ID | ✓ Yes |
-| `client_secret` | Your SideDrawer OAuth Client Secret | ✓ Yes |
 | `redirect_uri` | Where OAuth redirects after login | ✓ Yes |
 | `environment` | `sandbox` or `production` | ✓ Yes |
 
@@ -109,7 +102,7 @@ For externally-hosted widgets (like this one on GitHub Pages), URL parameters ar
 **Cause**: URL parameters are missing or incorrect
 
 **Solution**:
-1. Verify your widget URL includes all 4 parameters: `client_id`, `client_secret`, `redirect_uri`, `environment`
+1. Verify your widget URL includes all required parameters: `client_id`, `redirect_uri`, `environment`
 2. Check for typos (parameter names are case-sensitive)
 3. Ensure there are no line breaks in the URL
 4. Try copying the example URL and replacing just the credentials
@@ -177,21 +170,18 @@ For technical support, contact:
 
 ## Security Notes
 
-### URL Parameters and Client Secret
+### URL Parameters and Security
 
-**Question**: Is it safe to include `client_secret` in the URL?
+This widget uses PKCE (Proof Key for Code Exchange), which is a public-client OAuth 2.0 flow. It does **not** require or use a `client_secret`. Only `client_id` is needed in the URL — this is a public identifier and is safe to include in URLs.
 
-**Answer**: Yes, for this specific use case:
-
-1. **Not Publicly Accessible**: The widget URL is only accessible to authenticated Zoho CRM users within your organization
-2. **Industry Standard**: This is how other Zoho CRM integrations (HeyAdvisor, Cloven) handle external widgets
-3. **Additional Security with PKCE**: The OAuth flow uses PKCE (Proof Key for Code Exchange) which adds an extra layer of security beyond just the client secret
-4. **HTTPS**: All communication is encrypted via HTTPS
-5. **Short-lived Tokens**: Access tokens are short-lived and automatically refreshed
+**Security measures in place:**
+1. **PKCE**: Protects the authorization code exchange without a client secret
+2. **HTTPS**: All communication is encrypted
+3. **Short-lived Tokens**: Access tokens expire automatically and are silently refreshed
 
 ### What Gets Stored Where
 
-- **URL Parameters**: Client ID and Secret are read once and stored in browser localStorage
+- **URL Parameters**: Client ID is read once and stored in browser localStorage
 - **Access Tokens**: Stored in browser localStorage (automatically encrypted by browser)
 - **Refresh Tokens**: Stored in browser localStorage for silent re-authentication
 - **OAuth Communication**: All requests use HTTPS with PKCE
@@ -219,7 +209,7 @@ This means:
 
 **Option 1: Single OAuth App (Simpler)**
 - Create one OAuth app in SideDrawer
-- Use the same `client_id` and `client_secret` for all Zoho organizations
+- Use the same `client_id` for all Zoho organizations
 - Easier to manage, single point of configuration
 
 **Option 2: Per-Customer OAuth Apps (More Secure)**

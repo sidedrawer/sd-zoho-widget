@@ -30,12 +30,7 @@ https://sidedrawer.github.io/SideDrawer/app/widget.html
 4. Paste this URL (replace with your credentials):
 
 ```
-https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
-```
-
-**Example URL:**
-```
-https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=AYKueA9CuMXe7fMj8QfJM722F98NwZyA&client_secret=Dwd47Osd6secRvrrfC31ng2oWGGuiwnr55IGm0qRxHsgiDtYSwu8GMEEHKScksTD&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
+https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
 ```
 
 ### Step 3: Test the Connection (30 seconds)
@@ -92,7 +87,7 @@ Note: Please enable the host (https://127.0.0.1:5001) in a new tab...
 Navigate to this URL (replace with your credentials):
 
 ```
-https://127.0.0.1:5001/app/widget.html?client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=https://127.0.0.1:5001/app/widget.html&environment=sandbox
+https://127.0.0.1:5001/app/widget.html?client_id=YOUR_CLIENT_ID&redirect_uri=https://127.0.0.1:5001/app/widget.html&environment=sandbox
 ```
 
 ### Step 6: Test the Connection (1 minute)
@@ -108,8 +103,7 @@ The widget URL includes these parameters:
 
 | Parameter | Description | Example |
 |-----------|-------------|---------|
-| `client_id` | Your SideDrawer OAuth Client ID | `AYKueA9CuMXe7fMj8QfJM722F98NwZyA` |
-| `client_secret` | Your SideDrawer OAuth Client Secret | `Dwd47Osd6sec...` |
+| `client_id` | Your SideDrawer OAuth Client ID | `YOUR_CLIENT_ID` |
 | `redirect_uri` | Where OAuth redirects after login | `https://sidedrawer.github.io/SideDrawer/app/widget.html` |
 | `environment` | `sandbox` or `production` | `sandbox` |
 
@@ -145,7 +139,7 @@ This shows a full integration with:
 **Problem**: Missing or incorrect URL parameters
 
 **Fix**: 
-1. Ensure your URL includes all 4 parameters: `client_id`, `client_secret`, `redirect_uri`, `environment`
+1. Ensure your URL includes all required parameters: `client_id`, `redirect_uri`, `environment`
 2. Check for typos (parameters are case-sensitive)
 3. Clear browser storage: Open console (F12) and run `localStorage.clear()`
 
@@ -172,7 +166,7 @@ This shows a full integration with:
 **Problem**: Token exchange fails
 
 **Fix**:
-1. Verify `client_id` and `client_secret` are correct (copy-paste to avoid typos)
+1. Verify `client_id` is correct (copy-paste to avoid typos)
 2. Ensure you're using the right `environment` (sandbox vs production)
 3. Check that your SideDrawer OAuth app has PKCE enabled
 4. Add `https://sidedrawer.github.io` to "Allowed Web Origins" in Auth0
@@ -336,7 +330,7 @@ The **correct and recommended** approach for production deployments:
 
 **GitHub Pages with URL Parameters:**
 ```
-https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=XXX&client_secret=XXX&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
+https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=YOUR_CLIENT_ID&redirect_uri=https://sidedrawer.github.io/SideDrawer/app/widget.html&environment=sandbox
 ```
 
 ### Why This Approach?
@@ -360,7 +354,7 @@ https://sidedrawer.github.io/SideDrawer/app/widget.html?client_id=XXX&client_sec
 1. **URL Parameters are the ONLY way** to configure externally-hosted widgets in Zoho CRM
 2. **Popup-based OAuth** is required because direct redirects are blocked by iframe restrictions
 3. **localStorage** is used to persist credentials across OAuth redirects and popup windows
-4. **PKCE** adds an extra security layer beyond client_secret
+4. **PKCE** (Proof Key for Code Exchange) secures the authorization code exchange — no client_secret needed or used
 5. **State parameter** carries both PKCE code_verifier and credentials to the popup
 
 **Happy coding! 🚀**

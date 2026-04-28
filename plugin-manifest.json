@@ -37,13 +37,6 @@
       "helpText": "OAuth2 Client ID from your SideDrawer OAuth application."
     },
     {
-      "name": "client_secret",
-      "label": "SideDrawer Client Secret",
-      "defaultValue": "",
-      "isRequired": true,
-      "helpText": "OAuth2 Client Secret from your SideDrawer OAuth application."
-    },
-    {
       "name": "environment",
       "label": "Environment",
       "defaultValue": "sandbox",
