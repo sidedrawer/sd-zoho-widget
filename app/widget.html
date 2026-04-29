@@ -52,7 +52,7 @@
         return sessionStorage.getItem('sd_config_' + key) || null;
       }
       
-      // OAuth2 Configuration (will be updated with Zoho config if available)
+      // OAuth2 Configuration — defaults to sandbox; updated below from URL params or Zoho config
       const OAUTH_CONFIG = {
         authorizationEndpoint: 'https://auth-sbx.sidedrawersbx.com/authorize',
         tokenEndpoint: 'https://auth-sbx.sidedrawersbx.com/oauth/token',
@@ -61,6 +61,17 @@
         redirectUri: getConfigParam('redirect_uri') || (window.location.origin + window.location.pathname.split('?')[0]),
         scope: 'openid profile email offline_access'
       };
+
+      // Apply environment from URL params — supports both 'environment' and 'env' param names
+      const envParam = getConfigParam('environment') || getConfigParam('env') || 'sandbox';
+      if (envParam === 'production') {
+        OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
+        OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
+        OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
+        console.log('🔧 Environment: PRODUCTION (from URL param)');
+      } else {
+        console.log('🔧 Environment: SANDBOX (default)');
+      }
 
       // Persist wizard-specific params through OAuth redirect so they survive the round-trip
       getConfigParam('stripe_price');
@@ -285,6 +296,9 @@
                 this.showError(`Authentication failed: ${event.data.error}`);
               }
             });
+
+            // Apply Zoho-hosted config variables (overrides URL params if running inside Zoho CRM)
+            await this.loadZohoConfig();
 
             // Initialize after Zoho setup (or fallback)
             console.log('Proceeding with initialization (Zoho initialized:', this.zohoInitialized, ')');
