@@ -681,11 +681,17 @@ class TenantCreationWizardWithCredentials {
   async loadRegions() {
     const regions = this.state.databaseRegions || [];
     if (!regions.length) return;
-    const knownIds = this.buildRegionSelectOptions().map(o => o.value);
-    const firstId = knownIds[0] || '';
+    const options = this.buildRegionSelectOptions();
+    const knownIds = options.map(o => o.value);
     const current = String(this.state.region ?? '').trim();
     if (!current || !knownIds.includes(current)) {
-      if (firstId) this.state.region = firstId;
+      const canadaOption = options.find(o => {
+        const cc = this.getRegionCountryCode(o.region);
+        if (cc) return cc.toUpperCase() === 'CA';
+        return o.value === 'CA';
+      });
+      const defaultId = canadaOption ? canadaOption.value : (knownIds[0] || '');
+      if (defaultId) this.state.region = defaultId;
     } else {
       this.state.region = current;
     }

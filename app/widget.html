@@ -61,6 +61,10 @@
         redirectUri: getConfigParam('redirect_uri') || (window.location.origin + window.location.pathname.split('?')[0]),
         scope: 'openid profile email offline_access'
       };
+
+      // Persist wizard-specific params through OAuth redirect so they survive the round-trip
+      getConfigParam('stripe_price');
+      getConfigParam('coupon_id');
       
       // Log initial configuration
       console.log('🔧 Initial OAuth Config (PKCE - NO CLIENT SECRET):');
