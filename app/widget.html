@@ -441,6 +441,15 @@
                   }
                 }
                 
+                // If redirectUri was not recovered from state (old state format or parse failure),
+                // reconstruct it from the popup's current URL by stripping OAuth callback params
+                if (!OAUTH_CONFIG.redirectUri || OAUTH_CONFIG.redirectUri === (window.location.origin + window.location.pathname)) {
+                  const popupUrl = new URL(window.location.href);
+                  ['code', 'state', 'error', 'error_description'].forEach(p => popupUrl.searchParams.delete(p));
+                  OAUTH_CONFIG.redirectUri = popupUrl.toString();
+                  console.log('✅ Popup: redirectUri reconstructed from popup URL:', OAUTH_CONFIG.redirectUri);
+                }
+
                 // Fallback to localStorage only if state failed
                 if (!codeVerifier) {
                   codeVerifier = localStorage.getItem(STORAGE_KEYS.codeVerifier);
