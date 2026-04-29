@@ -428,6 +428,13 @@
                     } else {
                       console.log('✅ Popup: environment set to SANDBOX from state');
                     }
+
+                    // Recover redirectUri from state — popup has separate sessionStorage so
+                    // the parent's redirect_uri must be passed via state to guarantee exact match
+                    if (stateData.redirectUri) {
+                      OAUTH_CONFIG.redirectUri = stateData.redirectUri;
+                      console.log('✅ Popup: redirectUri recovered from state:', stateData.redirectUri);
+                    }
                   } catch (e) {
                     console.warn('⚠ Could not parse state parameter:', e);
                     console.error('State parsing error details:', e.stack);
@@ -837,11 +844,12 @@
             console.log('✓ Code verifier stored:', codeVerifier.substring(0, 10) + '...');
             console.log('✓ Code verifier length:', codeVerifier.length);
 
-            // Build authorization URL with state containing code verifier + env for popup recovery
+            // Build authorization URL with state containing code verifier + env + redirectUri for popup recovery
             const stateObj = {
               random: this.generateRandomString(16),
               verifier: codeVerifier,
-              env: envParam
+              env: envParam,
+              redirectUri: OAUTH_CONFIG.redirectUri
             };
             const state = JSON.stringify(stateObj);
             const encodedState = btoa(state);
