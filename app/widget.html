@@ -418,6 +418,16 @@
                     console.log('🔍 Parsed state data:', stateData);
                     codeVerifier = stateData.verifier;
                     console.log('✅ Code verifier from state parameter:', codeVerifier ? codeVerifier.substring(0, 10) + '...' : 'NOT FOUND');
+
+                    // Recover environment from state so popup uses correct token endpoint
+                    if (stateData.env === 'production') {
+                      OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
+                      OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
+                      OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
+                      console.log('✅ Popup: environment set to PRODUCTION from state');
+                    } else {
+                      console.log('✅ Popup: environment set to SANDBOX from state');
+                    }
                   } catch (e) {
                     console.warn('⚠ Could not parse state parameter:', e);
                     console.error('State parsing error details:', e.stack);
@@ -827,10 +837,11 @@
             console.log('✓ Code verifier stored:', codeVerifier.substring(0, 10) + '...');
             console.log('✓ Code verifier length:', codeVerifier.length);
 
-            // Build authorization URL with state containing code verifier for fallback
+            // Build authorization URL with state containing code verifier + env for popup recovery
             const stateObj = {
               random: this.generateRandomString(16),
-              verifier: codeVerifier
+              verifier: codeVerifier,
+              env: envParam
             };
             const state = JSON.stringify(stateObj);
             const encodedState = btoa(state);
