@@ -192,6 +192,10 @@
                   if (!refreshedSession.clientId) {
                     refreshedSession.clientId = clientId;
                   }
+                  // Ensure env is in session
+                  if (!refreshedSession.env) {
+                    refreshedSession.env = envParam;
+                  }
                   
                   console.log('[SideDrawer Widget] ✅ Token refreshed successfully');
                   console.log('[SideDrawer Widget] New token expires at:', refreshedSession.expiresAt ? new Date(parseInt(refreshedSession.expiresAt)).toISOString() : 'N/A');
@@ -230,11 +234,17 @@
                     const clientId = getClientId();
                     if (clientId) {
                       sessionData.clientId = clientId;
-                      // Update stored session with clientId
-                      localStorage.setItem('sdSession', JSON.stringify(sessionData));
                     }
                   }
-                  
+
+                  // Ensure env is in session so SidedrawerRelated can sync its ENVIRONMENT
+                  if (!sessionData.env) {
+                    sessionData.env = envParam;
+                  }
+
+                  // Persist any additions back to localStorage
+                  localStorage.setItem('sdSession', JSON.stringify(sessionData));
+
                   window.parent.postMessage({
                     type: 'SIDEDRAWER_SESSION_RESPONSE',
                     session: sessionData
@@ -354,8 +364,12 @@
 
         // Simple localStorage-only session management
         async setZohoSession(data) {
+          // Stamp env onto the session so SidedrawerRelated can sync its ENVIRONMENT
+          if (!data.env) {
+            data.env = envParam;
+          }
           localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
-          console.log('✓ Stored session in localStorage');
+          console.log('✓ Stored session in localStorage (env:', data.env, ')');
           return true;
         }
 
