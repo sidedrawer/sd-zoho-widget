@@ -415,12 +415,8 @@
 
         // Simple localStorage-only session management
         async setZohoSession(data) {
-          // Stamp env onto the session so SidedrawerRelated can sync its ENVIRONMENT
-          if (!data.env) {
-            data.env = envParam;
-          }
           localStorage.setItem(ZOHO_SESSION_KEY, JSON.stringify(data));
-          console.log('✓ Stored session in localStorage (env:', data.env, ')');
+          console.log('✓ Stored session in localStorage (env:', data.env || 'not set', ')');
           return true;
         }
 
@@ -1113,7 +1109,7 @@
               } catch (error) {
                 console.error('❌ Token refresh error:', error);
                 this.showError(`Failed to refresh session: ${error.message}`, true);
-                return;
+                throw error;
               }
             }
             this.showDisconnectedStatus();
@@ -1177,6 +1173,9 @@
             console.error('Error details:', error.stack);
             // Show disconnect option since refresh token is likely invalid
             this.showError(`Failed to refresh session: ${error.message}`, true);
+            // Re-throw so callers (e.g. REFRESH_SIDEDRAWER_TOKEN handler) know the refresh failed
+            // and don't silently return the old expired session as if it were refreshed.
+            throw error;
           }
         }
 
@@ -1338,6 +1337,10 @@
           // Use new refresh token if provided, otherwise keep existing one
           const refreshTokenToUse = tokenData.refresh_token || existingRefreshToken;
           
+          // Detect env from the new access token JWT so SidedrawerRelated can sync ENVIRONMENT.
+          // detectEnvFromJWT is authoritative — never trust the URL envParam inside a bridge iframe.
+          const tokenEnv = detectEnvFromJWT(tokenData.access_token) || envParam;
+
           const sessionData = {
             accessToken: tokenData.access_token,
             expiresAt: expiresAt,
@@ -1345,7 +1348,9 @@
             // Store refresh token in session object too (for consistency with @SidedrawerRelated)
             refreshToken: refreshTokenToUse || null,
             // Persist clientId so it survives across token refreshes without needing URL params
-            clientId: OAUTH_CONFIG.clientId || null
+            clientId: OAUTH_CONFIG.clientId || null,
+            // env lets SidedrawerRelated sync its ENVIRONMENT without relying on Zoho config vars
+            env: tokenEnv
           };
           
           console.log('💾 Saving session data...');
