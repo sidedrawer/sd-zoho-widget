@@ -90,6 +90,53 @@
       };
 
       const ZOHO_SESSION_KEY = 'sdSession'; // Zoho session storage key
+
+      // Detect environment from a JWT's iss claim — independent of URL params or Zoho config.
+      // This is the authoritative source when the widget runs as a session bridge iframe,
+      // because the iframe URL may have been built with the wrong env (e.g. sandbox default).
+      function detectEnvFromJWT(token) {
+        try {
+          const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+          const payload = JSON.parse(atob(b64));
+          const iss = payload.iss || '';
+          return iss.includes('sbx') ? 'sandbox' : 'production';
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // Apply detected environment to OAUTH_CONFIG, overriding any URL-param-based defaults.
+      function applyDetectedEnvToConfig(detectedEnv) {
+        if (!detectedEnv) return;
+        if (detectedEnv === 'production') {
+          OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
+          OAUTH_CONFIG.tokenEndpoint        = 'https://auth.sidedrawer.com/oauth/token';
+          OAUTH_CONFIG.audience             = 'https://user-api.sidedrawer.com';
+          console.log('[SideDrawer Widget] 🔧 OAUTH_CONFIG overridden to PRODUCTION (from JWT iss)');
+        } else {
+          OAUTH_CONFIG.authorizationEndpoint = 'https://auth-sbx.sidedrawersbx.com/authorize';
+          OAUTH_CONFIG.tokenEndpoint        = 'https://auth-sbx.sidedrawersbx.com/oauth/token';
+          OAUTH_CONFIG.audience             = 'https://user-api-sbx.sidedrawersbx.com';
+          console.log('[SideDrawer Widget] 🔧 OAUTH_CONFIG confirmed as SANDBOX (from JWT iss)');
+        }
+      }
+
+      // Read stored session and align OAUTH_CONFIG with the JWT's actual Auth0 tenant.
+      function syncEnvFromStoredSession() {
+        try {
+          const raw = localStorage.getItem(ZOHO_SESSION_KEY);
+          if (!raw) return;
+          const session = JSON.parse(raw);
+          const token = session.accessToken;
+          if (!token) return;
+          const detectedEnv = detectEnvFromJWT(token);
+          applyDetectedEnvToConfig(detectedEnv);
+          return detectedEnv;
+        } catch (e) {
+          console.warn('[SideDrawer Widget] Could not sync env from stored session:', e.message);
+          return null;
+        }
+      }
       
       // Helper function to extract Auth0 domain from authorization endpoint
       function getAuth0Domain() {
@@ -166,6 +213,11 @@
               console.log('[SideDrawer Widget] 🔄 Received token refresh request');
               
               try {
+                // Override OAUTH_CONFIG endpoints based on the stored JWT's iss claim.
+                // The iframe may have been created with env=sandbox (the default) even when
+                // the user authenticated against production — the JWT iss is authoritative.
+                const detectedEnv = syncEnvFromStoredSession();
+
                 // Get client_id from multiple sources
                 const clientId = getClientId();
                 
@@ -192,10 +244,8 @@
                   if (!refreshedSession.clientId) {
                     refreshedSession.clientId = clientId;
                   }
-                  // Ensure env is in session
-                  if (!refreshedSession.env) {
-                    refreshedSession.env = envParam;
-                  }
+                  // Stamp env from JWT detection (authoritative) rather than URL envParam
+                  refreshedSession.env = detectedEnv || envParam;
                   
                   console.log('[SideDrawer Widget] ✅ Token refreshed successfully');
                   console.log('[SideDrawer Widget] New token expires at:', refreshedSession.expiresAt ? new Date(parseInt(refreshedSession.expiresAt)).toISOString() : 'N/A');
@@ -224,6 +274,8 @@
             // Handle REQUEST_SIDEDRAWER_SESSION message
             if (event.data && event.data.type === 'REQUEST_SIDEDRAWER_SESSION') {
               console.log('📥 Received session request from parent window');
+              // Align OAUTH_CONFIG with the stored JWT so any subsequent refresh uses the right tenant
+              syncEnvFromStoredSession();
               const session = localStorage.getItem('sdSession');
               if (session) {
                 try {
@@ -237,10 +289,9 @@
                     }
                   }
 
-                  // Ensure env is in session so SidedrawerRelated can sync its ENVIRONMENT
-                  if (!sessionData.env) {
-                    sessionData.env = envParam;
-                  }
+                  // Stamp env from JWT detection (authoritative) so SidedrawerRelated syncs correctly
+                  const jwtEnv = detectEnvFromJWT(sessionData.accessToken);
+                  sessionData.env = jwtEnv || sessionData.env || envParam;
 
                   // Persist any additions back to localStorage
                   localStorage.setItem('sdSession', JSON.stringify(sessionData));
