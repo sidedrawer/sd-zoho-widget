@@ -1189,6 +1189,14 @@
           `;
 
           try {
+            // Auto-refresh if session is expired before testing
+            const session = await this.getZohoSession();
+            if (session && this.isTokenExpired(session.expiresAt)) {
+              const refreshToken = await this.getRefreshToken();
+              if (refreshToken) {
+                await this.refreshAccessToken();
+              }
+            }
             const token = await this.getAccessToken();
             
             // Test API call to SideDrawer tenant endpoint
