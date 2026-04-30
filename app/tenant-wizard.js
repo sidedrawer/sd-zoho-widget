@@ -327,7 +327,7 @@ class TenantCreationWizard {
         const token = await auth.getAccessToken();
         const headers = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = `Bearer ${token}`;
-        const response = await fetch(`${apiBase}/subscriptions/prices/${encodeURIComponent(priceId)}`, { headers });
+        const response = await fetch(`${apiBase}/subscriptions/prices/price-id/${encodeURIComponent(priceId)}`, { headers });
         if (response.ok) {
           price = await response.json();
         } else {
