@@ -106,12 +106,11 @@
       }
 
       // Tenant creation requires a dedicated SideDrawer Client ID (OAuth app tied to one customer/brand) —
-      // disable the button while running on the shared default client_id to avoid creating tenants
-      // under the wrong app. Used by showDisconnectedStatus() and showConnectedStatus().
-      function getTenantButtonAttrs() {
-        return usingDefaultClientId
-          ? 'disabled title="Tenant creation requires a dedicated SideDrawer Client ID. Configure client_id to enable this."'
-          : '';
+      // hide the button entirely while running on the shared default client_id, since creating a
+      // tenant under the shared app would be wrong. Used by showDisconnectedStatus() and showConnectedStatus().
+      function getTenantCreationButtonHtml(btnClass) {
+        if (usingDefaultClientId) return '';
+        return `<button class="${btnClass}" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>`;
       }
 
       // Persist wizard-specific params through OAuth redirect so they survive the round-trip
@@ -782,9 +781,8 @@
             <div class="button-group">
               <button class="btn" onclick="auth.disconnect()">Disconnect</button>
               <button class="btn btn-success" onclick="auth.testConnection()">Test Connection</button>
-              <button class="btn btn-primary" ${getTenantButtonAttrs()} onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
+              ${getTenantCreationButtonHtml('btn btn-primary')}
             </div>
-            ${usingDefaultClientId ? '<p class="text-muted-sm mt-10">Tenant creation is disabled while using the default Client ID.</p>' : ''}
 
             <div id="test-result"></div>
           `;
@@ -813,8 +811,7 @@
             </div>
 
             <button class="btn btn-success" onclick="auth.startOAuthFlow()">Connect to SideDrawer</button>
-            <button class="btn btn-outline mt-10" ${getTenantButtonAttrs()} onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
-            ${usingDefaultClientId ? '<p class="text-muted-sm mt-10">Tenant creation is disabled while using the default Client ID.</p>' : ''}
+            ${getTenantCreationButtonHtml('btn btn-outline mt-10')}
           `;
         }
 
@@ -1045,8 +1042,37 @@
           `;
 
           try {
-            const codeVerifier = localStorage.getItem(STORAGE_KEYS.codeVerifier);
-            
+            // Try state parameter FIRST (can't be lost to storage clearing/partitioning),
+            // same recovery approach as the popup flow — the state also carries the exact
+            // redirect_uri/env used at authorize time, since OAUTH_CONFIG may have been
+            // recomputed differently on this fresh page load (e.g. default vs explicit client_id).
+            let codeVerifier = null;
+            const state = urlParams.get('state');
+            if (state) {
+              try {
+                const stateData = JSON.parse(atob(state));
+                codeVerifier = stateData.verifier || null;
+                if (stateData.env === 'production') {
+                  OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
+                  OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
+                  OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
+                }
+                if (stateData.redirectUri) {
+                  OAUTH_CONFIG.redirectUri = stateData.redirectUri;
+                }
+              } catch (e) {
+                console.warn('⚠ Could not parse state parameter:', e);
+              }
+            }
+
+            // Fallback to localStorage/sessionStorage only if state parsing failed
+            if (!codeVerifier) {
+              codeVerifier = localStorage.getItem(STORAGE_KEYS.codeVerifier);
+            }
+            if (!codeVerifier) {
+              codeVerifier = sessionStorage.getItem(STORAGE_KEYS.codeVerifier);
+            }
+
             if (!codeVerifier) {
               throw new Error('Code verifier not found. Please try again.');
             }
