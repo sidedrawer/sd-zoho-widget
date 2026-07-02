@@ -52,13 +52,27 @@
         return sessionStorage.getItem('sd_config_' + key) || null;
       }
       
+      // Default client_id per environment, used only when client_id is not explicitly supplied
+      // via URL param, sessionStorage, or Zoho config variables. client_id is a public OAuth
+      // identifier (not a secret), so hardcoding it here is safe — see README security notes.
+      const DEFAULT_CLIENT_IDS = {
+        sandbox: 'nOOi2dBgAKEFjX29u2SClVrOJZkOUrd4',
+        production: '' // TODO: set production default client_id once available
+      };
+
+      const explicitClientId = getConfigParam('client_id');
+      const explicitRedirectUri = getConfigParam('redirect_uri');
+      // True whenever no client_id was ever explicitly supplied (URL now, or cached from an
+      // earlier URL this session). Gates tenant creation — see showConnectedStatus/showDisconnectedStatus.
+      let usingDefaultClientId = !explicitClientId;
+
       // OAuth2 Configuration — defaults to sandbox; updated below from URL params or Zoho config
       const OAUTH_CONFIG = {
         authorizationEndpoint: 'https://auth-sbx.sidedrawersbx.com/authorize',
         tokenEndpoint: 'https://auth-sbx.sidedrawersbx.com/oauth/token',
-        clientId: getConfigParam('client_id') || null,
+        clientId: explicitClientId || null,
         audience: 'https://user-api-sbx.sidedrawersbx.com',
-        redirectUri: getConfigParam('redirect_uri') || (window.location.origin + window.location.pathname.split('?')[0]),
+        redirectUri: explicitRedirectUri || (window.location.origin + window.location.pathname.split('?')[0]),
         scope: 'openid profile email offline_access'
       };
 
@@ -71,6 +85,33 @@
         console.log('🔧 Environment: PRODUCTION (from URL param)');
       } else {
         console.log('🔧 Environment: SANDBOX (default)');
+      }
+
+      // Default client_id when not explicitly supplied (URL/sessionStorage/Zoho config all empty)
+      if (!OAUTH_CONFIG.clientId) {
+        OAUTH_CONFIG.clientId = DEFAULT_CLIENT_IDS[envParam] || null;
+        if (OAUTH_CONFIG.clientId) {
+          console.log(`🔧 Using default client_id for ${envParam}`);
+        }
+      }
+
+      // Default redirect_uri when not explicitly supplied AND client_id is also defaulted:
+      // self URL + resolved client_id, matching the exact pattern already used when
+      // client_id/redirect_uri are passed manually. Gated on usingDefaultClientId (not just
+      // OAUTH_CONFIG.clientId) so that an explicitly-supplied client_id with no redirect_uri
+      // keeps its original fallback (bare self URL) — unchanged from before this feature.
+      if (!explicitRedirectUri && usingDefaultClientId && OAUTH_CONFIG.clientId) {
+        const selfUrl = window.location.origin + window.location.pathname.split('?')[0];
+        OAUTH_CONFIG.redirectUri = `${selfUrl}?client_id=${OAUTH_CONFIG.clientId}`;
+      }
+
+      // Tenant creation requires a dedicated SideDrawer Client ID (OAuth app tied to one customer/brand) —
+      // disable the button while running on the shared default client_id to avoid creating tenants
+      // under the wrong app. Used by showDisconnectedStatus() and showConnectedStatus().
+      function getTenantButtonAttrs() {
+        return usingDefaultClientId
+          ? 'disabled title="Tenant creation requires a dedicated SideDrawer Client ID. Configure client_id to enable this."'
+          : '';
       }
 
       // Persist wizard-specific params through OAuth redirect so they survive the round-trip
@@ -390,6 +431,7 @@
                 // Client ID (can also come from URL params)
                 if (config.client_id && config.client_id.trim()) {
                   OAUTH_CONFIG.clientId = config.client_id.trim();
+                  usingDefaultClientId = false;
                   console.log('✓ Client ID loaded from Zoho config');
                 }
               
@@ -740,8 +782,9 @@
             <div class="button-group">
               <button class="btn" onclick="auth.disconnect()">Disconnect</button>
               <button class="btn btn-success" onclick="auth.testConnection()">Test Connection</button>
-              <button class="btn btn-primary" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
+              <button class="btn btn-primary" ${getTenantButtonAttrs()} onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
             </div>
+            ${usingDefaultClientId ? '<p class="text-muted-sm mt-10">Tenant creation is disabled while using the default Client ID.</p>' : ''}
 
             <div id="test-result"></div>
           `;
@@ -770,7 +813,8 @@
             </div>
 
             <button class="btn btn-success" onclick="auth.startOAuthFlow()">Connect to SideDrawer</button>
-            <button class="btn btn-outline mt-10" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
+            <button class="btn btn-outline mt-10" ${getTenantButtonAttrs()} onclick="auth.showTenantCreationFlow()">Create New Tenant</button>
+            ${usingDefaultClientId ? '<p class="text-muted-sm mt-10">Tenant creation is disabled while using the default Client ID.</p>' : ''}
           `;
         }
 
