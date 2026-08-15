@@ -37,6 +37,27 @@
       // Read URL parameters for initial config
       const urlParams = new URLSearchParams(window.location.search);
       const isOAuthCallback = urlParams.has('code') || urlParams.has('error');
+
+      // On an OAuth callback the URL carries only ?code&state — no client_id, env or
+      // redirect_uri — and a popup does not reliably inherit sessionStorage. Decode `state`
+      // BEFORE anything reads config, so every value below resolves from it instead of
+      // silently falling back to another environment's defaults.
+      //
+      // Getting this wrong is subtle and expensive: envParam defaults to 'sandbox', a SANDBOX
+      // default client_id is chosen, and it is then POSTed to the DEV token endpoint. Auth0
+      // answers 401 with no Access-Control-Allow-Origin, which the browser reports as
+      // "blocked by CORS policy" — pointing the investigation at CORS rather than at the client_id.
+      const callbackState = (() => {
+        if (!isOAuthCallback) return null;
+        const raw = urlParams.get('state');
+        if (!raw) return null;
+        try {
+          return JSON.parse(atob(raw));
+        } catch (e) {
+          console.warn('⚠ Could not decode OAuth state:', e.message);
+          return null;
+        }
+      })();
       
       // Helper to get config param (from URL or sessionStorage)
       function getConfigParam(key) {
@@ -61,8 +82,8 @@
         development: '8x5fbdV5yaGsD3WJkIw5fjweF0ZB7L56'
       };
 
-      const explicitClientId = getConfigParam('client_id');
-      const explicitRedirectUri = getConfigParam('redirect_uri');
+      const explicitClientId = (callbackState && callbackState.clientId) || getConfigParam('client_id');
+      const explicitRedirectUri = (callbackState && callbackState.redirectUri) || getConfigParam('redirect_uri');
       // True whenever no client_id was ever explicitly supplied (URL now, or cached from an
       // earlier URL this session). Gates tenant creation — see showConnectedStatus/showDisconnectedStatus.
       let usingDefaultClientId = !explicitClientId;
@@ -103,7 +124,7 @@
       };
 
       // Apply environment from URL params — supports both 'environment' and 'env' param names
-      const envParam = getConfigParam('environment') || getConfigParam('env') || 'sandbox';
+      const envParam = (callbackState && callbackState.env) || getConfigParam('environment') || getConfigParam('env') || 'sandbox';
       applyEnvToConfig(envParam, 'from URL param');
 
       // Default client_id when not explicitly supplied (URL/sessionStorage/Zoho config all empty)
@@ -548,6 +569,13 @@
                     if (stateData.env) {
                       applyEnvToConfig(stateData.env, 'popup, from OAuth state');
                     }
+                    // Must follow applyEnvToConfig: the env switch does not touch clientId, and
+                    // the value set at load time came from the wrong environment's defaults.
+                    if (stateData.clientId) {
+                      OAUTH_CONFIG.clientId = stateData.clientId;
+                      usingDefaultClientId = false;
+                      console.log('✅ Popup: client_id recovered from state:', stateData.clientId);
+                    }
 
                     // Recover redirectUri from state — popup has separate sessionStorage so
                     // the parent's redirect_uri must be passed via state to guarantee exact match
@@ -978,7 +1006,13 @@
               random: this.generateRandomString(16),
               verifier: codeVerifier,
               env: envParam,
-              redirectUri: OAUTH_CONFIG.redirectUri
+              redirectUri: OAUTH_CONFIG.redirectUri,
+              // The callback URL carries only ?code&state, and the popup does not reliably
+              // inherit sessionStorage — so without this, envParam falls back to 'sandbox'
+              // and a SANDBOX default client_id is chosen, then POSTed to the dev token
+              // endpoint. Auth0 answers 401 with no CORS header, which surfaces in the browser
+              // as a misleading "blocked by CORS policy" error.
+              clientId: OAUTH_CONFIG.clientId
             };
             const state = JSON.stringify(stateObj);
             const encodedState = btoa(state);
@@ -1072,6 +1106,10 @@
                 codeVerifier = stateData.verifier || null;
                 if (stateData.env) {
                   applyEnvToConfig(stateData.env, 'callback, from OAuth state');
+                }
+                if (stateData.clientId) {
+                  OAUTH_CONFIG.clientId = stateData.clientId;
+                  usingDefaultClientId = false;
                 }
                 if (stateData.redirectUri) {
                   OAUTH_CONFIG.redirectUri = stateData.redirectUri;
