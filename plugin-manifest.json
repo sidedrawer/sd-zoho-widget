@@ -15,6 +15,7 @@
       "https://api.sidedrawer.com",
       "https://subscription-api.sidedrawer.com",
       "https://user-api-dev.sidedrawerdev.com",
+      "https://user-api-stg.sidedrawer.com",
       "https://tenants-gateway-api-dev.sidedrawerdev.com",
       "https://api-dev.sidedrawerdev.com",
       "https://subscription-api-dev.sidedrawerdev.com"
