@@ -98,6 +98,28 @@
         development: { auth: 'https://acc-stg.sidedrawer.com',     audience: 'https://user-api-stg.sidedrawer.com' }
       };
 
+      // API hosts per environment. Previously each call site did
+      // `OAUTH_CONFIG.audience.includes('sbx') ? sbx : prod` — a binary test that sends every
+      // non-sbx environment (including development, whose audience is user-api-stg) to PRODUCTION.
+      const API_HOSTS = {
+        production:  { api: 'https://api.sidedrawer.com',        tenants: 'https://tenants-gateway-api.sidedrawer.com',        userApi: 'https://user-api.sidedrawer.com',        console: 'https://console.sidedrawer.com' },
+        sandbox:     { api: 'https://api-sbx.sidedrawersbx.com', tenants: 'https://tenants-gateway-api-sbx.sidedrawersbx.com', userApi: 'https://user-api-sbx.sidedrawersbx.com', console: 'https://console-sbx.sidedrawersbx.com' },
+        development: { api: 'https://api-dev.sidedrawerdev.com', tenants: 'https://tenants-gateway-api-dev.sidedrawerdev.com', userApi: 'https://user-api-dev.sidedrawerdev.com', console: 'https://console-dev.sidedrawerdev.com' }
+      };
+
+      /**
+       * API hosts for the environment currently in OAUTH_CONFIG.
+       * Matches the audience EXACTLY against AUTH_ENVIRONMENTS rather than sniffing for 'sbx'.
+       * Lazily called, because tenant-wizard*.js load before this inline script runs.
+       */
+      window.sdHosts = function sdHosts() {
+        const aud = (typeof OAUTH_CONFIG !== 'undefined' && OAUTH_CONFIG.audience) || '';
+        for (const [env, cfg] of Object.entries(AUTH_ENVIRONMENTS)) {
+          if (cfg.audience === aud) return API_HOSTS[env];
+        }
+        return API_HOSTS.sandbox;
+      };
+
       /** Unknown environments resolve to sandbox, preserving the previous production-or-sandbox behaviour. */
       function envConfig(env) {
         return AUTH_ENVIRONMENTS[env] || AUTH_ENVIRONMENTS.sandbox;
@@ -889,10 +911,7 @@
             const token = await this.getAccessToken();
             if (!token) return false;
 
-            const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-            const tenantApi = isSandbox
-              ? 'https://tenants-gateway-api-sbx.sidedrawersbx.com/api/v1/tenants/tenant/shared'
-              : 'https://tenants-gateway-api.sidedrawer.com/api/v1/tenants/tenant/shared';
+            const tenantApi = window.sdHosts().tenants + '/api/v1/tenants/tenant/shared';
 
             const response = await fetch(tenantApi, {
               headers: {
@@ -1324,10 +1343,7 @@
             const token = await this.getAccessToken();
             
             // Test API call to SideDrawer tenant endpoint
-            const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-            const tenantApi = isSandbox
-              ? 'https://tenants-gateway-api-sbx.sidedrawersbx.com/api/v1/tenants/tenant/shared'
-              : 'https://tenants-gateway-api.sidedrawer.com/api/v1/tenants/tenant/shared';
+            const tenantApi = window.sdHosts().tenants + '/api/v1/tenants/tenant/shared';
             const response = await fetch(tenantApi, {
               headers: {
                 'Authorization': `Bearer ${token}`,
@@ -1607,10 +1623,7 @@
             alert('Could not open Console: your session is not available. Try reloading the page.');
             return;
           }
-          const isSandbox = OAUTH_CONFIG.audience && OAUTH_CONFIG.audience.includes('sbx');
-          const consoleBase = isSandbox
-            ? 'https://console-sbx.sidedrawersbx.com'
-            : 'https://console.sidedrawer.com';
+          const consoleBase = window.sdHosts().console;
           const url = `${consoleBase}?token=${encodeURIComponent(token)}`;
           window.open(url, '_blank', 'noopener,noreferrer');
         } catch (e) {

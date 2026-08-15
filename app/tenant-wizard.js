@@ -251,10 +251,7 @@ class TenantCreationWizard {
 
   async loadDictionary() {
     try {
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-      const apiUrl = isSandbox
-        ? 'https://api-sbx.sidedrawersbx.com/api/v1/configs/content/dictionaries/console_20210501/locale/en-CA'
-        : 'https://api.sidedrawer.com/api/v1/configs/content/dictionaries/console_20210501/locale/en-CA';
+      const apiUrl = window.sdHosts().api + '/api/v1/configs/content/dictionaries/console_20210501/locale/en-CA';
 
       const response = await fetch(apiUrl);
       if (response.ok) {
@@ -274,10 +271,7 @@ class TenantCreationWizard {
 
   async loadPrices() {
     try {
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-      const apiUrl = isSandbox
-        ? 'https://api-sbx.sidedrawersbx.com/api/v1/subscriptions/prices'
-        : 'https://api.sidedrawer.com/api/v1/subscriptions/prices';
+      const apiUrl = window.sdHosts().api + '/api/v1/subscriptions/prices';
 
       const token = await auth.getAccessToken();
       const headers = {
@@ -320,10 +314,7 @@ class TenantCreationWizard {
     if (!price) {
       // Fetch individually from backend
       try {
-        const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-        const apiBase = isSandbox
-          ? 'https://api-sbx.sidedrawersbx.com/api/v1'
-          : 'https://api.sidedrawer.com/api/v1';
+        const apiBase = window.sdHosts().api + '/api/v1';
         const token = await auth.getAccessToken();
         const headers = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -593,10 +584,7 @@ class TenantCreationWizard {
 
   async loadStripePublicKey() {
     try {
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-      const apiBase = isSandbox
-        ? 'https://api-sbx.sidedrawersbx.com/api/v1'
-        : 'https://api.sidedrawer.com/api/v1';
+      const apiBase = window.sdHosts().api + '/api/v1';
       
       // Try to get Stripe public key from subscriptions API
       try {
@@ -1357,10 +1345,7 @@ class TenantCreationWizard {
 
     try {
       const token = await auth.getAccessToken();
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-      const tenantApi = isSandbox
-        ? 'https://tenants-gateway-api-sbx.sidedrawersbx.com/api/v1/tenants/'
-        : 'https://tenants-gateway-api.sidedrawer.com/api/v1/tenants/';
+      const tenantApi = window.sdHosts().tenants + '/api/v1/tenants/';
 
       const headers = { 'Content-Type': 'application/json' };
       if (token) {
@@ -1595,10 +1580,7 @@ class TenantCreationWizard {
       if (!token) return;
 
       // Get user account to find customer ID
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-      const userApi = isSandbox
-        ? 'https://user-api-sbx.sidedrawersbx.com'
-        : 'https://user-api.sidedrawer.com';
+      const userApi = window.sdHosts().userApi;
 
       const userResponse = await fetch(`${userApi}/me`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -1936,10 +1918,7 @@ class TenantCreationWizard {
       };
 
       // Call secure backend signup endpoint
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-      const backendUrl = isSandbox
-        ? 'https://api-sbx.sidedrawersbx.com/api/v1/tenants/tenant/signup'
-        : 'https://api.sidedrawer.com/api/v1/tenants/tenant/signup';
+      const backendUrl = window.sdHosts().api + '/api/v1/tenants/tenant/signup';
 
       // Sanitize request body for logging (mask sensitive fields)
       const sanitizedBody = { ...requestBody };

@@ -325,10 +325,7 @@ class TenantCreationWizardWithCredentials {
 
   async loadAccountAndSettings() {
     try {
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-      const userApi = isSandbox
-        ? 'https://api-sbx.sidedrawersbx.com/api/v1/users'
-        : 'https://api.sidedrawer.com/api/v1/users';
+      const userApi = window.sdHosts().api + '/api/v1/users';
 
       // GET /accounts/open-id/{openId} - REQUIRES access token
       if (!this.state.openId) {
@@ -436,11 +433,8 @@ class TenantCreationWizardWithCredentials {
 
   async loadDictionary() {
     try {
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
       const localeId = this.state.settings?.preferredLanguage || 'en-CA';
-      const apiUrl = isSandbox
-        ? `https://api-sbx.sidedrawersbx.com/api/v1/configs/content/dictionaries/console_20210501/locale/${localeId}`
-        : `https://api.sidedrawer.com/api/v1/configs/content/dictionaries/console_20210501/locale/${localeId}`;
+      const apiUrl = `${window.sdHosts().api}/api/v1/configs/content/dictionaries/console_20210501/locale/${localeId}`;
 
       console.log(`  → GET ${apiUrl}`);
       const response = await fetch(apiUrl);
@@ -468,10 +462,7 @@ class TenantCreationWizardWithCredentials {
 
   async loadPrices() {
     try {
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-      const apiUrl = isSandbox
-        ? 'https://api-sbx.sidedrawersbx.com/api/v1/subscriptions/prices'
-        : 'https://api.sidedrawer.com/api/v1/subscriptions/prices';
+      const apiUrl = window.sdHosts().api + '/api/v1/subscriptions/prices';
 
       const headers = {
         'Content-Type': 'application/json'
@@ -512,10 +503,7 @@ class TenantCreationWizardWithCredentials {
 
     if (!price) {
       try {
-        const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-        const apiBase = isSandbox
-          ? 'https://api-sbx.sidedrawersbx.com/api/v1'
-          : 'https://api.sidedrawer.com/api/v1';
+        const apiBase = window.sdHosts().api + '/api/v1';
         const headers = {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.state.accessToken}`
@@ -791,10 +779,7 @@ class TenantCreationWizardWithCredentials {
     }
 
     try {
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-      const apiUrl = isSandbox
-        ? `https://api-sbx.sidedrawersbx.com/api/v1/subscriptions/customers/customer-id/${this.state.customerId}`
-        : `https://api.sidedrawer.com/api/v1/subscriptions/customers/customer-id/${this.state.customerId}`;
+      const apiUrl = `${window.sdHosts().api}/api/v1/subscriptions/customers/customer-id/${this.state.customerId}`;
 
       console.log(`  → GET ${apiUrl}`);
       const response = await fetch(apiUrl, {
@@ -825,10 +810,7 @@ class TenantCreationWizardWithCredentials {
     if (!this.state.customerId) return;
 
     try {
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-      const apiUrl = isSandbox
-        ? `https://api-sbx.sidedrawersbx.com/api/v1/subscriptions/customers/customer-id/${this.state.customerId}/payment-methods`
-        : `https://api.sidedrawer.com/api/v1/subscriptions/customers/customer-id/${this.state.customerId}/payment-methods`;
+      const apiUrl = `${window.sdHosts().api}/api/v1/subscriptions/customers/customer-id/${this.state.customerId}/payment-methods`;
 
       console.log(`  → GET ${apiUrl}`);
       const response = await fetch(apiUrl, {
@@ -866,11 +848,8 @@ class TenantCreationWizardWithCredentials {
 
   async loadStripePublicKey() {
     try {
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
       // Try subscription API endpoint first
-      const subscriptionApi = isSandbox
-        ? 'https://api-sbx.sidedrawersbx.com/api/v1/subscriptions'
-        : 'https://api.sidedrawer.com/api/v1/subscriptions';
+      const subscriptionApi = window.sdHosts().api + '/api/v1/subscriptions';
       
       try {
         console.log(`  → GET ${subscriptionApi}/subscriptions/public-key`);
@@ -1455,10 +1434,7 @@ class TenantCreationWizardWithCredentials {
     if (!this.state.tenantDomain) return;
 
     try {
-      const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-      const tenantApi = isSandbox
-        ? 'https://tenants-gateway-api-sbx.sidedrawersbx.com/api/v1/tenants/'
-        : 'https://tenants-gateway-api.sidedrawer.com/api/v1/tenants/';
+      const tenantApi = window.sdHosts().tenants + '/api/v1/tenants/';
 
       const headers = { 'Content-Type': 'application/json' };
       if (this.state.accessToken) {
@@ -1757,16 +1733,9 @@ class TenantCreationWizardWithCredentials {
 
   async createTenantWithAngularFlow() {
     // Phase 2: Sequential API calls following Angular flow
-    const isSandbox = OAUTH_CONFIG.audience.includes('sbx');
-      const userApi = isSandbox
-        ? 'https://api-sbx.sidedrawersbx.com/api/v1/users'
-        : 'https://api.sidedrawer.com/api/v1/users';
-    const subscriptionApi = isSandbox
-      ? 'https://api-sbx.sidedrawersbx.com/api/v1/subscriptions'
-      : 'https://api.sidedrawer.com/api/v1/subscriptions';
-    const tenantApi = isSandbox
-      ? 'https://tenants-gateway-api-sbx.sidedrawersbx.com/api/v1/tenants'
-      : 'https://tenants-gateway-api.sidedrawer.com/api/v1/tenants';
+      const userApi = window.sdHosts().api + '/api/v1/users';
+    const subscriptionApi = window.sdHosts().api + '/api/v1/subscriptions';
+    const tenantApi = window.sdHosts().tenants + '/api/v1/tenants';
 
     const headers = {
       'Authorization': `Bearer ${this.state.accessToken}`,
@@ -1836,9 +1805,7 @@ class TenantCreationWizardWithCredentials {
 
       // Step 3: Create tenant using signup endpoint (replaces all subsequent steps)
       this.updateProcessStep('createTenant', 'processing');
-      const tenantApiBase = isSandbox
-        ? 'https://api-sbx.sidedrawersbx.com/api/v1/tenants'
-        : 'https://api.sidedrawer.com/api/v1/tenants';
+      const tenantApiBase = window.sdHosts().api + '/api/v1/tenants';
       
       // Validate required fields
       if (!this.state.selectedPrice?.id) {

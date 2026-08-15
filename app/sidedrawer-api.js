@@ -7,13 +7,8 @@
 
 class SideDrawerAPI {
   constructor() {
-    const isSandbox = !window.OAUTH_CONFIG || (window.OAUTH_CONFIG.audience || '').includes('sbx');
-    this.baseURL = isSandbox
-      ? 'https://user-api-sbx.sidedrawersbx.com'
-      : 'https://user-api.sidedrawer.com';
-    this.tenantURL = isSandbox
-      ? 'https://tenants-gateway-api-sbx.sidedrawersbx.com'
-      : 'https://tenants-gateway-api.sidedrawer.com';
+    this.baseURL = window.sdHosts().userApi;
+    this.tenantURL = window.sdHosts().tenants;
     this.storageKeys = {
       accessToken: 'sidedrawer_access_token',
       refreshToken: 'sidedrawer_refresh_token',
