@@ -57,7 +57,8 @@
       // identifier (not a secret), so hardcoding it here is safe — see README security notes.
       const DEFAULT_CLIENT_IDS = {
         sandbox: 'nOOi2dBgAKEFjX29u2SClVrOJZkOUrd4',
-        production: '' // TODO: set production default client_id once available
+        production: '', // TODO: set production default client_id once available
+        development: '8x5fbdV5yaGsD3WJkIw5fjweF0ZB7L56'
       };
 
       const explicitClientId = getConfigParam('client_id');
@@ -66,26 +67,44 @@
       // earlier URL this session). Gates tenant creation — see showConnectedStatus/showDisconnectedStatus.
       let usingDefaultClientId = !explicitClientId;
 
+      // Auth0 tenant + API audience per environment. Every env-dependent decision in this file
+      // reads from this map, so adding an environment means adding one entry here.
+      const AUTH_ENVIRONMENTS = {
+        production:  { auth: 'https://auth.sidedrawer.com',        audience: 'https://user-api.sidedrawer.com' },
+        sandbox:     { auth: 'https://auth-sbx.sidedrawersbx.com', audience: 'https://user-api-sbx.sidedrawersbx.com' },
+        // Dev authenticates against the staging accounts tenant, which deliberately does NOT
+        // follow the -dev.sidedrawerdev.com pattern the API hosts use.
+        development: { auth: 'https://acc-stg.sidedrawer.com',     audience: 'https://user-api-dev.sidedrawerdev.com' }
+      };
+
+      /** Unknown environments resolve to sandbox, preserving the previous production-or-sandbox behaviour. */
+      function envConfig(env) {
+        return AUTH_ENVIRONMENTS[env] || AUTH_ENVIRONMENTS.sandbox;
+      }
+
+      /** Point OAUTH_CONFIG at one environment's Auth0 tenant. */
+      function applyEnvToConfig(env, reason) {
+        const cfg = envConfig(env);
+        OAUTH_CONFIG.authorizationEndpoint = `${cfg.auth}/authorize`;
+        OAUTH_CONFIG.tokenEndpoint = `${cfg.auth}/oauth/token`;
+        OAUTH_CONFIG.audience = cfg.audience;
+        const resolved = AUTH_ENVIRONMENTS[env] ? env : 'sandbox';
+        console.log(`[SideDrawer Widget] 🔧 OAUTH_CONFIG → ${resolved.toUpperCase()}${reason ? ` (${reason})` : ''}`);
+      }
+
       // OAuth2 Configuration — defaults to sandbox; updated below from URL params or Zoho config
       const OAUTH_CONFIG = {
-        authorizationEndpoint: 'https://auth-sbx.sidedrawersbx.com/authorize',
-        tokenEndpoint: 'https://auth-sbx.sidedrawersbx.com/oauth/token',
+        authorizationEndpoint: `${AUTH_ENVIRONMENTS.sandbox.auth}/authorize`,
+        tokenEndpoint: `${AUTH_ENVIRONMENTS.sandbox.auth}/oauth/token`,
         clientId: explicitClientId || null,
-        audience: 'https://user-api-sbx.sidedrawersbx.com',
+        audience: AUTH_ENVIRONMENTS.sandbox.audience,
         redirectUri: explicitRedirectUri || (window.location.origin + window.location.pathname.split('?')[0]),
         scope: 'openid profile email offline_access'
       };
 
       // Apply environment from URL params — supports both 'environment' and 'env' param names
       const envParam = getConfigParam('environment') || getConfigParam('env') || 'sandbox';
-      if (envParam === 'production') {
-        OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
-        OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
-        OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
-        console.log('🔧 Environment: PRODUCTION (from URL param)');
-      } else {
-        console.log('🔧 Environment: SANDBOX (default)');
-      }
+      applyEnvToConfig(envParam, 'from URL param');
 
       // Default client_id when not explicitly supplied (URL/sessionStorage/Zoho config all empty)
       if (!OAUTH_CONFIG.clientId) {
@@ -134,11 +153,28 @@
       // Detect environment from a JWT's iss claim — independent of URL params or Zoho config.
       // This is the authoritative source when the widget runs as a session bridge iframe,
       // because the iframe URL may have been built with the wrong env (e.g. sandbox default).
+      // This is authoritative and OVERRIDES the env passed in the iframe URL, so it must know about
+      // every environment — a token it cannot place is sent to the wrong Auth0 tenant on refresh.
       function detectEnvFromJWT(token) {
         try {
           const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
           const payload = JSON.parse(atob(b64));
           const iss = payload.iss || '';
+          if (!iss) return null;
+          // Compare HOSTNAMES exactly, not substrings — several environments share the
+          // sidedrawer.com domain (acc-stg.sidedrawer.com vs auth.sidedrawer.com), so a
+          // substring test would mis-file tokens. Adding an entry to AUTH_ENVIRONMENTS is
+          // enough to teach this function a new environment.
+          let issHost = '';
+          try { issHost = new URL(iss).hostname; } catch (e) { issHost = ''; }
+          if (issHost) {
+            for (const [env, cfg] of Object.entries(AUTH_ENVIRONMENTS)) {
+              try {
+                if (issHost === new URL(cfg.auth).hostname) return env;
+              } catch (e) { /* skip a malformed entry rather than failing detection */ }
+            }
+          }
+          // Legacy fallback for issuers that don't match a configured host.
           return iss.includes('sbx') ? 'sandbox' : 'production';
         } catch (e) {
           return null;
@@ -148,17 +184,7 @@
       // Apply detected environment to OAUTH_CONFIG, overriding any URL-param-based defaults.
       function applyDetectedEnvToConfig(detectedEnv) {
         if (!detectedEnv) return;
-        if (detectedEnv === 'production') {
-          OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
-          OAUTH_CONFIG.tokenEndpoint        = 'https://auth.sidedrawer.com/oauth/token';
-          OAUTH_CONFIG.audience             = 'https://user-api.sidedrawer.com';
-          console.log('[SideDrawer Widget] 🔧 OAUTH_CONFIG overridden to PRODUCTION (from JWT iss)');
-        } else {
-          OAUTH_CONFIG.authorizationEndpoint = 'https://auth-sbx.sidedrawersbx.com/authorize';
-          OAUTH_CONFIG.tokenEndpoint        = 'https://auth-sbx.sidedrawersbx.com/oauth/token';
-          OAUTH_CONFIG.audience             = 'https://user-api-sbx.sidedrawersbx.com';
-          console.log('[SideDrawer Widget] 🔧 OAUTH_CONFIG confirmed as SANDBOX (from JWT iss)');
-        }
+        applyEnvToConfig(detectedEnv, 'from JWT iss');
       }
 
       // Read stored session and align OAUTH_CONFIG with the JWT's actual Auth0 tenant.
@@ -182,10 +208,10 @@
       function getAuth0Domain() {
         try {
           const url = new URL(OAUTH_CONFIG.authorizationEndpoint);
-          return url.origin; // Returns https://auth-sbx.sidedrawersbx.com or https://auth.sidedrawer.com
+          return url.origin; // One of the AUTH_ENVIRONMENTS `auth` hosts
         } catch (e) {
           console.error('Failed to parse Auth0 domain:', e);
-          return 'https://auth-sbx.sidedrawersbx.com'; // Fallback to sandbox
+          return AUTH_ENVIRONMENTS.sandbox.auth; // Fallback to sandbox
         }
       }
 
@@ -435,16 +461,11 @@
                 }
               
               // Environment (REQUIRED)
-              if (config.environment === 'production') {
-                OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
-                OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
-                OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
-                console.log('✓ Using PRODUCTION environment');
-              } else if (config.environment === 'sandbox') {
-                // Already set to sandbox by default
-                console.log('✓ Using SANDBOX environment');
+              if (AUTH_ENVIRONMENTS[config.environment]) {
+                applyEnvToConfig(config.environment, 'from Zoho config');
               } else {
-                console.warn('⚠ No environment configured - using sandbox (default)');
+                // Leave whatever the URL param already resolved to — do not clobber it.
+                console.warn(`⚠ No recognised environment in Zoho config (got ${JSON.stringify(config.environment)}) - keeping current environment`);
               }
             } else {
               console.warn('⚠ No Zoho configuration found - using defaults (development mode)');
@@ -521,14 +542,11 @@
                     codeVerifier = stateData.verifier;
                     console.log('✅ Code verifier from state parameter:', codeVerifier ? codeVerifier.substring(0, 10) + '...' : 'NOT FOUND');
 
-                    // Recover environment from state so popup uses correct token endpoint
-                    if (stateData.env === 'production') {
-                      OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
-                      OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
-                      OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
-                      console.log('✅ Popup: environment set to PRODUCTION from state');
-                    } else {
-                      console.log('✅ Popup: environment set to SANDBOX from state');
+                    // Recover environment from state so popup uses correct token endpoint.
+                    // Only override when state actually carried an env — otherwise keep whatever
+                    // this popup's own URL params already resolved to.
+                    if (stateData.env) {
+                      applyEnvToConfig(stateData.env, 'popup, from OAuth state');
                     }
 
                     // Recover redirectUri from state — popup has separate sessionStorage so
@@ -1052,10 +1070,8 @@
               try {
                 const stateData = JSON.parse(atob(state));
                 codeVerifier = stateData.verifier || null;
-                if (stateData.env === 'production') {
-                  OAUTH_CONFIG.authorizationEndpoint = 'https://auth.sidedrawer.com/authorize';
-                  OAUTH_CONFIG.tokenEndpoint = 'https://auth.sidedrawer.com/oauth/token';
-                  OAUTH_CONFIG.audience = 'https://user-api.sidedrawer.com';
+                if (stateData.env) {
+                  applyEnvToConfig(stateData.env, 'callback, from OAuth state');
                 }
                 if (stateData.redirectUri) {
                   OAUTH_CONFIG.redirectUri = stateData.redirectUri;

@@ -9,10 +9,15 @@
       "https://subscription-api-sbx.sidedrawersbx.com",
       "https://api.stripe.com",
       "https://auth.sidedrawer.com",
+      "https://acc-stg.sidedrawer.com",
       "https://user-api.sidedrawer.com",
       "https://tenants-gateway-api.sidedrawer.com",
       "https://api.sidedrawer.com",
-      "https://subscription-api.sidedrawer.com"
+      "https://subscription-api.sidedrawer.com",
+      "https://user-api-dev.sidedrawerdev.com",
+      "https://tenants-gateway-api-dev.sidedrawerdev.com",
+      "https://api-dev.sidedrawerdev.com",
+      "https://subscription-api-dev.sidedrawerdev.com"
     ],
     "script-src": [
       "https://js.stripe.com"
@@ -41,7 +46,7 @@
       "label": "Environment",
       "defaultValue": "sandbox",
       "isRequired": false,
-      "helpText": "SideDrawer environment: 'sandbox' or 'production'."
+      "helpText": "SideDrawer environment: 'sandbox', 'production' or 'development'. Any other value is treated as 'sandbox'."
     }
   ]
 }
