@@ -1202,22 +1202,38 @@
         /**
          * Refresh the access token.
          *
-         * SINGLE-FLIGHT. Refresh-token ROTATION is enabled on this tenant, so the moment one
-         * refresh succeeds the token it consumed is dead. Three call sites can fire
-         * concurrently (page-load expiry check, ensureValidSession, testConnection); without
-         * this guard the second request replays the same now-rotated token and Auth0 answers
-         * 403 invalid_grant "Unknown or invalid refresh token" — which looks like a broken
-         * session even though the first refresh succeeded.
+         * Refresh-token ROTATION is enabled on this tenant, so the moment one refresh succeeds,
+         * the token it consumed is dead. Two layers of protection, because there are two kinds
+         * of concurrent callers:
          *
-         * Concurrent callers therefore await the SAME in-flight promise rather than starting
-         * their own exchange.
+         * 1. SINGLE-FLIGHT (same page). Three call sites in THIS script can fire concurrently
+         *    (page-load expiry check, ensureValidSession, testConnection). Concurrent callers
+         *    await the same in-flight promise instead of starting their own exchange.
+         *
+         * 2. CROSS-TAB LOCK (different pages). `sdSession` lives in localStorage, which is
+         *    shared by every tab/frame on this origin — including the hidden bridge iframe a
+         *    Zoho CRM tab keeps open. The single-flight guard above is a plain JS variable and
+         *    is invisible to those other contexts, so two tabs can each read the same refresh
+         *    token and both start refreshing at once. The loser POSTs a token the winner has
+         *    already rotated away, and Auth0 answers 403 invalid_grant "Unknown or invalid
+         *    refresh token" — even though nothing on this page did anything wrong.
+         *    `navigator.locks` serializes the actual exchange across every tab on this origin;
+         *    `_doRefreshAccessToken` re-reads the refresh token from storage at its own start,
+         *    so a caller that waited for the lock picks up whatever the winner just rotated to.
          */
         async refreshAccessToken() {
           if (this._refreshInFlight) {
-            console.log('⏳ Refresh already in flight — awaiting the existing request');
+            console.log('⏳ Refresh already in flight on this page — awaiting the existing request');
             return this._refreshInFlight;
           }
-          this._refreshInFlight = this._doRefreshAccessToken()
+          const runLocked = () => {
+            if (typeof navigator !== 'undefined' && navigator.locks && navigator.locks.request) {
+              return navigator.locks.request('sidedrawer_token_refresh', () => this._doRefreshAccessToken());
+            }
+            // No Web Locks API available — fall back to same-page-only protection.
+            return this._doRefreshAccessToken();
+          };
+          this._refreshInFlight = runLocked()
             .finally(() => { this._refreshInFlight = null; });
           return this._refreshInFlight;
         }
