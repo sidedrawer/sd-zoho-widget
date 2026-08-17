@@ -1199,7 +1199,30 @@
           }
         }
 
+        /**
+         * Refresh the access token.
+         *
+         * SINGLE-FLIGHT. Refresh-token ROTATION is enabled on this tenant, so the moment one
+         * refresh succeeds the token it consumed is dead. Three call sites can fire
+         * concurrently (page-load expiry check, ensureValidSession, testConnection); without
+         * this guard the second request replays the same now-rotated token and Auth0 answers
+         * 403 invalid_grant "Unknown or invalid refresh token" — which looks like a broken
+         * session even though the first refresh succeeded.
+         *
+         * Concurrent callers therefore await the SAME in-flight promise rather than starting
+         * their own exchange.
+         */
         async refreshAccessToken() {
+          if (this._refreshInFlight) {
+            console.log('⏳ Refresh already in flight — awaiting the existing request');
+            return this._refreshInFlight;
+          }
+          this._refreshInFlight = this._doRefreshAccessToken()
+            .finally(() => { this._refreshInFlight = null; });
+          return this._refreshInFlight;
+        }
+
+        async _doRefreshAccessToken() {
           const refreshToken = await this.getRefreshToken();
           
           if (!refreshToken) {
