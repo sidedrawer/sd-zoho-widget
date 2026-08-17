@@ -166,17 +166,24 @@
         OAUTH_CONFIG.redirectUri = `${selfUrl}?client_id=${OAUTH_CONFIG.clientId}`;
       }
 
-      // Tenant creation requires a dedicated SideDrawer Client ID (OAuth app tied to one customer/brand) —
-      // hide the button entirely while running on the shared default client_id, since creating a
-      // tenant under the shared app would be wrong. Used by showDisconnectedStatus() and showConnectedStatus().
+      // Persist wizard-specific params through OAuth redirect so they survive the round-trip.
+      // `configuredStripePriceId` also gates tenant creation below — read once here, since
+      // neither the URL nor sessionStorage changes for the rest of this page's lifetime.
+      const configuredStripePriceId = getConfigParam('stripe_price');
+      getConfigParam('coupon_id');
+
+      // Tenant creation requires TWO things:
+      // 1. A dedicated SideDrawer Client ID (OAuth app tied to one customer/brand) — hide the
+      //    button while running on the shared default client_id, since creating a tenant under
+      //    the shared app would be wrong.
+      // 2. A pre-configured stripe_price — this flow has no manual plan-picker UI (see
+      //    applyDefaultSubscriptionSelection in the wizards), so with no price configured the
+      //    button would lead into a wizard with nothing valid to submit.
+      // Used by showDisconnectedStatus() and showConnectedStatus().
       function getTenantCreationButtonHtml(btnClass) {
-        if (usingDefaultClientId) return '';
+        if (usingDefaultClientId || !configuredStripePriceId) return '';
         return `<button class="${btnClass}" onclick="auth.showTenantCreationFlow()">Create New Tenant</button>`;
       }
-
-      // Persist wizard-specific params through OAuth redirect so they survive the round-trip
-      getConfigParam('stripe_price');
-      getConfigParam('coupon_id');
       
       // Log initial configuration
       console.log('🔧 Initial OAuth Config (PKCE - NO CLIENT SECRET):');

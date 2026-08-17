@@ -1322,7 +1322,11 @@ class TenantCreationWizardWithCredentials {
           if (!this.state.customerBillingCurrency) {
             this.syncCurrencyFromRegion();
           }
-          this.applyDefaultSubscriptionSelection();
+          // A pre-configured fixedStripePriceId must survive a region change, not be
+          // overwritten by the currency-driven default-plan pick.
+          if (!this.state.fixedStripePriceId) {
+            this.applyDefaultSubscriptionSelection();
+          }
           this.render();
         });
       }
@@ -1467,7 +1471,13 @@ class TenantCreationWizardWithCredentials {
         return;
       }
       this.syncWizardCurrency();
-      this.applyDefaultSubscriptionSelection();
+      // A pre-configured stripe_price (this.state.fixedStripePriceId, loaded and applied in
+      // init() via loadFixedStripePrice()) must be left alone here — this call used to
+      // unconditionally re-run the auto-pick logic and silently overwrite it every time the
+      // user advanced past step 1, which is why a configured price was never actually honoured.
+      if (!this.state.fixedStripePriceId) {
+        this.applyDefaultSubscriptionSelection();
+      }
       if (!this.state.selectedPrice) {
         this.state.validationError = dict.tenantsetupsubscription_selectplan || 'Please select a subscription plan';
         this.render();
