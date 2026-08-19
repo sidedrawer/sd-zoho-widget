@@ -584,40 +584,52 @@ class TenantCreationWizardWithCredentials {
     return '';
   }
 
-  /**
-   * True if the CMS row has a real slug, code, or ISO country (not a blank default placeholder).
-   */
-  regionRowHasDatabaseregionOrCountryOrCode(region) {
-    if (region == null || region === '') return false;
-    if (typeof region === 'string') return !!String(region).trim();
-    const tryVal = (v) => {
-      if (v == null) return '';
-      const s = String(v).trim();
-      if (!s || s === 'undefined' || s === 'null') return '';
-      return s;
-    };
-    if (
-      tryVal(region.databaseregion) ||
-      tryVal(region.databaseRegion) ||
-      tryVal(region.DatabaseRegion) ||
-      tryVal(region.dataBaseRegion) ||
-      tryVal(region.data_base_region) ||
-      tryVal(region.regionKey) ||
-      tryVal(region.slug) ||
-      tryVal(region.value) ||
-      tryVal(region.regionId)
-    ) return true;
-    if (tryVal(region.code) || tryVal(region.regionCode)) return true;
-    const cc = this.getRegionCountryCode(region);
-    return !!(cc && /^[A-Za-z]{2}$/.test(cc));
-  }
-
   getRegionCountryCode(region) {
     if (!region) return undefined;
     const cc = region.countrycode ?? region.countryCode;
     if (cc == null) return undefined;
     const t = String(cc).trim();
     return t.length ? t : undefined;
+  }
+
+  /**
+   * The value POSTed as `region`: the CMS `databaseregion`, verbatim.
+   * Deliberately has NO countrycode/code/_id fallback, unlike getRegionDatabaseregion
+   * (which resolves the <option> value). An empty string is a real, meaningful value
+   * here — it means the primary data region — and is what both the CMS default row
+   * and Canada carry.
+   */
+  getRegionWireValue(region) {
+    if (region == null) return '';
+    if (typeof region === 'string') {
+      const s = region.trim();
+      return !s || s === 'undefined' || s === 'null' ? '' : s;
+    }
+    const tryVal = (v) => {
+      if (v == null) return '';
+      const s = String(v).trim();
+      return !s || s === 'undefined' || s === 'null' ? '' : s;
+    };
+    return (
+      tryVal(region.databaseregion) ||
+      tryVal(region.databaseRegion) ||
+      tryVal(region.DatabaseRegion) ||
+      tryVal(region.dataBaseRegion) ||
+      tryVal(region.data_base_region) ||
+      ''
+    );
+  }
+
+  /** Wire value for whatever the region <select> currently holds. */
+  getSelectedRegionWireValue() {
+    return this.getRegionWireValue(this.findRegionRowBySelectValue(this.state.region));
+  }
+
+  /** Dropdown label: country name, else the region slug, else the blank CMS default row. */
+  getRegionOptionLabel(region) {
+    const cc = this.getRegionCountryCode(region);
+    if (cc) return this.getCountryName(cc);
+    return this.getRegionWireValue(region) || 'Default';
   }
 
   buildRegionSelectOptions() {
@@ -627,7 +639,6 @@ class TenantCreationWizardWithCredentials {
     rows.forEach((region, index) => {
       let v = this.getRegionDatabaseregion(region);
       if (!v) return;
-      if (/^[a-f0-9]{24}$/i.test(v) && !this.regionRowHasDatabaseregionOrCountryOrCode(region)) return;
       if (seen.has(v)) {
         const alt = region._id != null ? String(region._id).trim() : '';
         v = alt && !seen.has(alt) ? alt : `${v}#${index}`;
@@ -666,23 +677,24 @@ class TenantCreationWizardWithCredentials {
     }
   }
 
+  /**
+   * Preselect the region the CMS marks as default (`isdefault: true` in the
+   * databaseregions collection) instead of assuming Canada. That row is intentionally
+   * blank — no countrycode, empty databaseregion — so it is identified by its row id
+   * and resolves to an empty wire value meaning "the primary data region".
+   */
   async loadRegions() {
-    const regions = this.state.databaseRegions || [];
-    if (!regions.length) return;
     const options = this.buildRegionSelectOptions();
-    const knownIds = options.map(o => o.value);
+    if (!options.length) return;
     const current = String(this.state.region ?? '').trim();
-    if (!current || !knownIds.includes(current)) {
-      const canadaOption = options.find(o => {
-        const cc = this.getRegionCountryCode(o.region);
-        if (cc) return cc.toUpperCase() === 'CA';
-        return o.value === 'CA';
-      });
-      const defaultId = canadaOption ? canadaOption.value : (knownIds[0] || '');
-      if (defaultId) this.state.region = defaultId;
-    } else {
+    if (current && options.some(o => o.value === current)) {
       this.state.region = current;
+      return;
     }
+    const defaultOption = options.find(
+      o => o.region && (o.region.isdefault === true || o.region.isDefault === true)
+    );
+    this.state.region = (defaultOption || options[0]).value;
   }
 
   async loadCurrencies() {
@@ -1061,8 +1073,7 @@ class TenantCreationWizardWithCredentials {
           <option value="">${dict.tenantsetupname_tenantregionplaceholder || 'Select region'}</option>
           ${this.buildRegionSelectOptions().map(({ value: rid, region }) => {
             const sel = String(this.state.region || '').trim() === rid ? 'selected' : '';
-            const label =
-              this.getCountryName(this.getRegionCountryCode(region)) || rid;
+            const label = this.getRegionOptionLabel(region);
             return `
             <option value="${rid}" ${sel}>
               ${label}
@@ -1319,7 +1330,9 @@ class TenantCreationWizardWithCredentials {
         regionSelect.addEventListener('change', (e) => {
           this.state.region = String(e.target.value || '').trim();
           this.clearError('region-error');
-          if (!this.state.customerBillingCurrency) {
+          // Currency belongs to the Stripe price / customer when either is set; the
+          // region must not override it.
+          if (!this.state.fixedStripePriceId && !this.state.customerBillingCurrency) {
             this.syncCurrencyFromRegion();
           }
           // A pre-configured fixedStripePriceId must survive a region change, not be
@@ -1831,7 +1844,7 @@ class TenantCreationWizardWithCredentials {
         body: JSON.stringify({
           tenantName: this.state.tenantName,
           brandCode: this.state.tenantDomain,
-          region: this.state.region,
+          region: this.getSelectedRegionWireValue(),
           startingQuantity: this.state.totalAdminUsers || 1,
           identityProvider: 'auth0',
           priceId: this.state.selectedPrice.id,
